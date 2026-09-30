@@ -44,6 +44,8 @@ HARDWARE_KEY_ALIASES = {
     "Knob5_Click": "Space_15",
 
     # Knob 6 (Pause Position)
+    "Knob6_CW": "OpenMediaPlayer",
+    "Knob6_CCW": "VolumeDown",
     "Knob6_Click": "Space_16"
 }
 
@@ -104,6 +106,8 @@ KNOBS_METADATA = [
         "name": "Pokrętło 6 (Pozycja Pause)",
         "icon": "⚙️",
         "actions": [
+            {"id": "Knob6_CW", "label": "Obrót w prawo (↻)", "default": "OpenMediaPlayer"},
+            {"id": "Knob6_CCW", "label": "Obrót w lewo (↺)", "default": "VolumeDown"},
             {"id": "Knob6_Click", "label": "Wciśnięcie (Przycisk ⊙)", "default": "VolumeMute"}
         ]
     }
@@ -483,11 +487,77 @@ class MacroItem:
         )
 
     def generate_code_block(self) -> str:
+        # Hardware buffer limit for GK6X / Semitek is max 60 actions per macro
         header = f"[Macro({self.name},{self.default_delay},{self.repeat_type},{self.repeat_count})]"
         lines = [header]
-        for a in self.actions:
+        safe_actions = self.actions[:60]
+        for a in safe_actions:
             lines.append(a.to_code_line())
         return "\n".join(lines)
+
+
+def get_system_battery_info() -> Dict[str, Any]:
+    """Read system power supply and peripheral battery details."""
+    import glob
+    res = {
+        "has_battery": False,
+        "percentage": 100,
+        "status": "Unknown",
+        "is_charging": False,
+        "details_str": "Brak danych o baterii",
+        "icon": "🔋",
+        "devices": []
+    }
+    
+    # 1. Search sysfs batteries (e.g. BAT0 on laptops like GPD Win Max 2)
+    bat_dirs = sorted(glob.glob('/sys/class/power_supply/BAT*'))
+    for b_dir in bat_dirs:
+        try:
+            name = os.path.basename(b_dir)
+            cap_file = os.path.join(b_dir, 'capacity')
+            status_file = os.path.join(b_dir, 'status')
+            
+            cap = 100
+            if os.path.exists(cap_file):
+                cap = int(open(cap_file).read().strip())
+            
+            st = "Unknown"
+            if os.path.exists(status_file):
+                st = open(status_file).read().strip()
+            
+            is_charging = st.lower() in ["charging", "full"]
+            
+            icon = "🔋"
+            if is_charging:
+                icon = "⚡"
+            elif cap <= 20:
+                icon = "🪫"
+            
+            status_pl = {
+                "Full": "Pełna (100%)",
+                "Charging": "Ładowanie",
+                "Discharging": "Rozładowywanie",
+                "Not charging": "Zasilacz podłączony (nie ładuje)",
+                "Unknown": "Podłączona"
+            }.get(st, st)
+
+            res["has_battery"] = True
+            res["percentage"] = cap
+            res["status"] = st
+            res["is_charging"] = is_charging
+            res["icon"] = icon
+            res["details_str"] = f"{icon} Bateria laptopa ({name}): {cap}% — {status_pl}"
+            res["devices"].append({
+                "name": f"Laptop ({name})",
+                "percentage": cap,
+                "status": status_pl,
+                "icon": icon
+            })
+            break # Primary battery found
+        except Exception:
+            pass
+            
+    return res
 
 
 class ApplyWorker(QThread):
@@ -792,25 +862,84 @@ class GKBackend(QObject):
         blocks.append("# ==========================\n# LIGHTING CONFIGURATION\n# ==========================")
         mode = self.lighting_config.get("mode", "preset")
         layer = self.lighting_config.get("layer", "Base")
+        brightness = int(self.lighting_config.get("brightness", 100))
 
-        if mode == "off":
+        if mode == "off" or brightness <= 0:
             blocks.append("[NoLighting]\n")
         elif mode == "static":
             preset_name = "CustomGUIStatic"
             static_colors = self.lighting_config.get("static_colors", {})
-            self._save_static_le_file(preset_name, static_colors)
+            self._save_static_le_file(preset_name, static_colors, brightness=brightness)
             blocks.append(f"[NoLighting]\n[Lighting({preset_name},{layer})]\n")
         else:
             preset_name = self.lighting_config.get("preset_name", "Spectral Cycle")
-            blocks.append(f"[NoLighting]\n[Lighting({preset_name},{layer})]\n")
+            actual_preset = self._prepare_preset_lighting(preset_name, brightness=brightness)
+            blocks.append(f"[NoLighting]\n[Lighting({actual_preset},{layer})]\n")
 
         return "\n".join(blocks)
 
-    def _save_static_le_file(self, preset_name: str, key_colors: Dict[str, str]):
+    def _prepare_preset_lighting(self, preset_name: str, brightness: int = 100) -> str:
+        """Create a brightness-scaled version of the .le lighting effect if needed."""
+        if brightness >= 100:
+            return preset_name
+
+        orig_path = os.path.join(LIGHTING_DIR, f"{preset_name}.le")
+        if not os.path.exists(orig_path):
+            return preset_name
+
+        try:
+            with open(orig_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            factor = max(0.0, min(1.0, brightness / 100.0))
+
+            def scale_val(val_str: str) -> str:
+                if not isinstance(val_str, str):
+                    return val_str
+                clean = val_str.replace("0x", "").replace("#", "")
+                if len(clean) == 6:
+                    try:
+                        r = int(int(clean[0:2], 16) * factor)
+                        g = int(int(clean[2:4], 16) * factor)
+                        b = int(int(clean[4:6], 16) * factor)
+                        return f"0x{r:02x}{g:02x}{b:02x}"
+                    except ValueError:
+                        return val_str
+                return val_str
+
+            if "Frames" in data and isinstance(data["Frames"], list):
+                for frame in data["Frames"]:
+                    if "Data" in frame and isinstance(frame["Data"], dict):
+                        for k, v in frame["Data"].items():
+                            frame["Data"][k] = scale_val(v)
+            elif "Data" in data and isinstance(data["Data"], dict):
+                for k, v in data["Data"].items():
+                    data["Data"][k] = scale_val(v)
+
+            scaled_name = f"{preset_name}_scaled_{brightness}"
+            scaled_path = os.path.join(LIGHTING_DIR, f"{scaled_name}.le")
+            with open(scaled_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            return scaled_name
+        except Exception as e:
+            print(f"Error scaling preset lighting: {e}")
+            return preset_name
+
+    def _save_static_le_file(self, preset_name: str, key_colors: Dict[str, str], brightness: int = 100):
+        factor = max(0.0, min(1.0, brightness / 100.0))
         data = {}
         for k, hex_col in key_colors.items():
-            clean_hex = hex_col.replace("#", "")
-            data[k] = f"0x{clean_hex.lower()}"
+            clean_hex = hex_col.replace("#", "").replace("0x", "")
+            if len(clean_hex) == 6:
+                try:
+                    r = int(int(clean_hex[0:2], 16) * factor)
+                    g = int(int(clean_hex[2:4], 16) * factor)
+                    b = int(int(clean_hex[4:6], 16) * factor)
+                    data[k] = f"0x{r:02x}{g:02x}{b:02x}"
+                except ValueError:
+                    data[k] = f"0x{clean_hex.lower()}"
+            else:
+                data[k] = f"0x{clean_hex.lower()}"
 
         static_json = {
             "Type": "Static",
@@ -820,6 +949,30 @@ class GKBackend(QObject):
         le_path = os.path.join(LIGHTING_DIR, f"{preset_name}.le")
         with open(le_path, "w", encoding="utf-8") as f:
             json.dump(static_json, f, indent=2)
+
+    def set_brightness(self, brightness: int, auto_apply: bool = False):
+        """Set brightness (0-100) and optionally apply immediately to hardware."""
+        brightness = max(0, min(100, int(brightness)))
+        self.lighting_config["brightness"] = brightness
+        self.save_profile()
+        if auto_apply:
+            self.apply_current_configuration()
+
+    def set_lighting_preset(self, preset_name: str, layer: str = "Base", auto_apply: bool = False):
+        """Set active lighting preset and optionally apply immediately."""
+        self.lighting_config["mode"] = "preset"
+        self.lighting_config["preset_name"] = preset_name
+        self.lighting_config["layer"] = layer
+        self.save_profile()
+        if auto_apply:
+            self.apply_current_configuration()
+
+    def set_lighting_off(self, auto_apply: bool = False):
+        """Turn off RGB lighting."""
+        self.lighting_config["mode"] = "off"
+        self.save_profile()
+        if auto_apply:
+            self.apply_current_configuration()
 
     # ==========================
     # APPLY / UNMAP OPERATIONS
@@ -886,6 +1039,8 @@ class GKBackend(QObject):
             macros_data = data.get("macros", {})
             self.macros = {name: MacroItem.from_dict(m) for name, m in macros_data.items()}
             self.lighting_config = data.get("lighting", self.lighting_config)
+            if "brightness" not in self.lighting_config:
+                self.lighting_config["brightness"] = 100
         except Exception as e:
             print(f"Error loading profile: {e}")
             self.space_mode = "split"

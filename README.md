@@ -41,7 +41,12 @@ Zaawansowana, natywna aplikacja graficzna w **Pythonie (PySide6)** stworzona dla
 
 ---
 
-### 3. 🌈 Oświetlenie LED & Efekty RGB
+### 3. 🌈 Oświetlenie LED, Jasność & Kontroler w Trayu
+- **Płynna regulacja jasności (0–100%):** Dedykowany suwak jasności oraz szybkie przyciski (25%, 50%, 75%, 100%, Wył.) z dynamicznym skalowaniem luminancji profili RGB.
+- **Kontroler w zasobniku KDE Plasma (System Tray):**
+  - Ikona w trayu ze wskaźnikiem na żywo: podgląd stanu baterii laptopa (`BAT0`), zasilacza i urządzeń bezprzewodowych.
+  - Szybkie menu kontekstowe: zmiana jasności podświetlenia (100%, 75%, 50%, 25%, 0%), szybkie motywy RGB, przełączanie warstw sprzętowych (Base, Layer 1-3).
+  - Działanie w tle i minimalizacja do traya przy zamykaniu okna.
 - **Biblioteka animacji:** Ponad 330 animowanych efektów z wyszukiwarką i podziałem na kategorie (Tęcza, Oddychanie, Fala, Gwiazdy/Meteor, Wiatrak, Dynamiczne).
 - **Wirtualne malowanie klawiatury (Per-Key RGB):** Malowanie pojedynczych klawiszy własnym kolorem z próbnika `QColorDialog`.
 - **Malowanie strefowe:** Szybkie nakładanie kolorów na strefy (WASD, Strzałki, NumPad, F1-F12, Litery, Całość).
@@ -50,8 +55,16 @@ Zaawansowana, natywna aplikacja graficzna w **Pythonie (PySide6)** stworzona dla
 
 ---
 
-### 4. 🚀 Zapis do Pamięci Klawiatury & Profile
-- **Przycisk "Wgraj do klawiatury" (Apply):** Generuje spójną konfigurację łączącą makra, remapy i oświetlenie, a następnie zapisuje je w trwałej pamięci Flash kontrolera GK104 Pro.
+### 4. 🎛️ Modularne Pokrętła (Rotary Knobs — GK104 Pro)
+- Obsługa do 6 modularnych pokręteł (Knob 1..6) z niezależnym mapowaniem obrotu w prawo (CW), obrotu w lewo (CCW) oraz wciśnięcia (Click).
+- Gotowe schematy: Głośność, Odtwarzacz muzyki, Nawigacja WWW, Przewijanie stron, Zoom, Karty okien.
+- Przycisk szybkiej synchronizacji: *"Skopiuj te pokrętła na wszystkie warstwy"* – sprawia, że pokrętła działają identycznie niezależnie od aktywnego profilu sprzętowego.
+
+---
+
+### 5. 🚀 Zapis do Pamięci Klawiatury & Profile
+- **Przycisk "Wgraj do klawiatury" (Apply):** Generuje spójną konfigurację łączącą makra, remapy, pokrętła i oświetlenie, a następnie zapisuje je w trwałej pamięci Flash kontrolera GK104 Pro.
+- **Zabezpieczenie bufora sprzętowego:** Automatyczna walidacja długości makr zapobiegająca błędom kontrolera.
 - **Reset do ustawień fabrycznych (Unmap):** Przywraca fabryczny stan układu klawiszy.
 - **Eksport & Import profili JSON:** Zapisywanie kopii zapasowej całej konfiguracji do pliku i łatwe przenoszenie między profilami.
 - **Automatyczna pamięć:** Wszystkie ustawienia zapisują się lokalnie w `~/.config/skyloong_studio/profile.json`.

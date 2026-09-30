@@ -1,21 +1,22 @@
 import os
 from typing import Dict, List, Optional
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTabWidget, QListWidget, QListWidgetItem,
     QLineEdit, QComboBox, QColorDialog, QFrame, QGridLayout,
     QScrollArea, QMessageBox, QProgressBar, QButtonGroup, QSizePolicy,
     QTableWidget, QTableWidgetItem, QHeaderView, QSpinBox, QCheckBox,
     QGroupBox, QSplitter, QTextEdit, QPlainTextEdit, QFileDialog,
-    QRadioButton
+    QRadioButton, QSlider, QMenu, QSystemTrayIcon
 )
-from PySide6.QtCore import Qt, QSize, Signal
-from PySide6.QtGui import QColor, QFont, QIcon
+from PySide6.QtCore import Qt, QSize, Signal, QTimer
+from PySide6.QtGui import QColor, QFont, QIcon, QPixmap, QAction
 
 from gk_backend import (
     GKBackend, KEY_DEFINITIONS, COLOR_PRESETS, AVAILABLE_LAYERS,
     TARGET_KEY_CATEGORIES, POPULAR_SHORTCUTS, MacroItem, MacroAction,
-    KNOBS_METADATA, KNOB_PRESETS, HARDWARE_KEY_ALIASES
+    KNOBS_METADATA, KNOB_PRESETS, HARDWARE_KEY_ALIASES,
+    get_system_battery_info
 )
 
 
@@ -113,6 +114,7 @@ class MainWindow(QMainWindow):
         self.current_macro_name: Optional[str] = None
 
         self.init_ui()
+        self.init_system_tray()
         self.connect_signals()
         self.refresh_device()
         self.load_effects()
@@ -144,6 +146,13 @@ class MainWindow(QMainWindow):
         self.device_status_lbl.setStyleSheet("color: #9ece6a; font-size: 12px;")
         title_box.addWidget(self.device_status_lbl)
         header_layout.addLayout(title_box)
+
+        header_layout.addSpacing(15)
+
+        # Battery Status Widget in Header
+        self.lbl_battery_header = QLabel("🔋 Bateria: Sprawdzanie...")
+        self.lbl_battery_header.setStyleSheet("color: #7aa2f7; font-size: 12px; font-weight: bold; background-color: #13141c; padding: 6px 12px; border-radius: 6px; border: 1px solid #24283b;")
+        header_layout.addWidget(self.lbl_battery_header)
 
         header_layout.addStretch()
 
@@ -407,6 +416,33 @@ class MainWindow(QMainWindow):
             theme_layout.addWidget(t_btn, idx // 2, idx % 2)
         right_vbox.addWidget(theme_group)
 
+        # Brightness Control Group
+        bright_group = QGroupBox("Jasność Podświetlenia Klawiatury")
+        bright_layout = QHBoxLayout(bright_group)
+        self.lbl_brightness_val = QLabel(f"Jasność: {self.backend.lighting_config.get('brightness', 100)}%")
+        self.lbl_brightness_val.setFixedWidth(100)
+        self.lbl_brightness_val.setStyleSheet("font-weight: bold; color: #ff9eaf;")
+        self.brightness_slider = QSlider(Qt.Horizontal)
+        self.brightness_slider.setRange(0, 100)
+        self.brightness_slider.setValue(int(self.backend.lighting_config.get("brightness", 100)))
+        self.brightness_slider.valueChanged.connect(self.on_brightness_slider_changed)
+        bright_layout.addWidget(self.lbl_brightness_val)
+        bright_layout.addWidget(self.brightness_slider)
+
+        for b_val in [25, 50, 75, 100]:
+            btn_b = QPushButton(f"{b_val}%")
+            btn_b.setFixedWidth(44)
+            btn_b.clicked.connect(lambda _, v=b_val: self.set_brightness_level(v))
+            bright_layout.addWidget(btn_b)
+
+        btn_apply_bright = QPushButton("⚡ Zastosuj")
+        btn_apply_bright.setObjectName("primaryBtn")
+        btn_apply_bright.setFixedWidth(80)
+        btn_apply_bright.clicked.connect(self.apply_brightness_now)
+        bright_layout.addWidget(btn_apply_bright)
+
+        right_vbox.addWidget(bright_group)
+
         # Tools: LED Off / Apply static
         tools_row = QHBoxLayout()
         btn_led_off = QPushButton("🌙 Wyłącz LED")
@@ -508,7 +544,11 @@ class MainWindow(QMainWindow):
         knobs_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #7aa2f7;")
         knobs_header.addWidget(knobs_title)
         knobs_header.addStretch()
-        knobs_header.addWidget(QLabel("Kliknij obrót lub wciśnięcie, aby przypisać własną akcję / makro na aktywnej warstwie:"))
+
+        btn_copy_knobs = QPushButton("📋 Skopiuj te pokrętła na wszystkie warstwy (Base, Layer 1-3)")
+        btn_copy_knobs.setStyleSheet("background-color: #2b3b55; color: #7aa2f7; font-weight: bold; padding: 4px 10px;")
+        btn_copy_knobs.clicked.connect(self.copy_knobs_to_all_layers)
+        knobs_header.addWidget(btn_copy_knobs)
         knobs_vbox.addLayout(knobs_header)
 
         knobs_grid = QGridLayout()
@@ -1551,3 +1591,209 @@ class MainWindow(QMainWindow):
             self.refresh_remap_ui()
             self.refresh_macro_list_ui()
             QMessageBox.information(self, "Import", f"Wczytano profil z: {fname}")
+
+    # =========================================================================
+    # BRIGHTNESS & KNOB HELPERS
+    # =========================================================================
+    def on_brightness_slider_changed(self, value: int):
+        self.lbl_brightness_val.setText(f"Jasność: {value}%")
+        self.backend.lighting_config["brightness"] = value
+
+    def set_brightness_level(self, value: int):
+        self.brightness_slider.setValue(value)
+        self.lbl_brightness_val.setText(f"Jasność: {value}%")
+        self.backend.set_brightness(value, auto_apply=True)
+        self.lbl_bottom_info.setText(f"Ustawiono jasność: {value}% i wgrano do klawiatury.")
+
+    def apply_brightness_now(self):
+        val = self.brightness_slider.value()
+        self.backend.set_brightness(val, auto_apply=True)
+        self.lbl_bottom_info.setText(f"Wgrywanie jasności {val}% do klawiatury...")
+
+    def copy_knobs_to_all_layers(self):
+        """Copy rotary knob configurations from active layer to all standard layers."""
+        src_layer_remaps = self.backend.get_remaps_for_layer(self.current_remap_layer)
+        knob_action_ids = [act["id"] for k_info in KNOBS_METADATA for act in k_info["actions"]]
+
+        copied_count = 0
+        for lid, _ in AVAILABLE_LAYERS:
+            if lid in ["Base", "Layer1", "Layer2", "Layer3"]:
+                if lid not in self.backend.remaps:
+                    self.backend.remaps[lid] = {}
+                for aid in knob_action_ids:
+                    if aid in src_layer_remaps:
+                        self.backend.remaps[lid][aid] = src_layer_remaps[aid]
+                        copied_count += 1
+                    elif aid in self.backend.remaps[lid]:
+                        del self.backend.remaps[lid][aid]
+
+        self.backend.save_profile()
+        self.refresh_remap_ui()
+        QMessageBox.information(
+            self,
+            "Pokrętła Skopiowane",
+            f"Pomyślnie zsynchronizowano ustawienia pokręteł z warstwy '{self.current_remap_layer}' "
+            f"na wszystkie warstwy (Base, Layer 1, Layer 2, Layer 3).\n\n"
+            f"Teraz pokrętła będą działać tak samo na każdym profilu klawiatury!"
+        )
+
+    # =========================================================================
+    # SYSTEM TRAY CONTROLLER & BATTERY MONITORING
+    # =========================================================================
+    def init_system_tray(self):
+        self.tray_icon = QSystemTrayIcon(self)
+        app_icon = QIcon.fromTheme("input-keyboard")
+        if app_icon.isNull():
+            pixmap = QPixmap(32, 32)
+            pixmap.fill(QColor("#7aa2f7"))
+            app_icon = QIcon(pixmap)
+        self.tray_icon.setIcon(app_icon)
+        self.tray_icon.setToolTip("Skyloong GK104 Pro Studio")
+
+        # Tray Context Menu
+        self.tray_menu = QMenu()
+
+        self.tray_title_action = QAction("⌨️ Skyloong GK104 Pro Studio", self)
+        self.tray_title_action.setEnabled(False)
+        self.tray_menu.addAction(self.tray_title_action)
+
+        self.tray_battery_action = QAction("🔋 Bateria: Sprawdzanie...", self)
+        self.tray_battery_action.setEnabled(False)
+        self.tray_menu.addAction(self.tray_battery_action)
+
+        self.tray_menu.addSeparator()
+
+        # Brightness Submenu
+        bright_menu = self.tray_menu.addMenu("💡 Jasność Podświetlenia")
+        for b_val, b_label in [
+            (100, "🌕 100% (Maksymalna)"),
+            (75, "🌖 75%"),
+            (50, "🌗 50%"),
+            (25, "🌘 25%"),
+            (0, "🌑 Wyłącz LED (0%)")
+        ]:
+            act = QAction(b_label, self)
+            act.triggered.connect(lambda _, v=b_val: self.on_tray_brightness_selected(v))
+            bright_menu.addAction(act)
+
+        # Quick Presets Submenu
+        preset_menu = self.tray_menu.addMenu("🌈 Szybki Profil RGB")
+        for p_name in ["Spectral Cycle", "Rainbow Streamer", "Breathing", "Cyberpunk 2077", "Matrix Green", "Ice Blizzard"]:
+            act = QAction(p_name, self)
+            act.triggered.connect(lambda _, pn=p_name: self.on_tray_preset_selected(pn))
+            preset_menu.addAction(act)
+
+        act_off = QAction("🌙 Wyłącz podświetlenie", self)
+        act_off.triggered.connect(self.turn_off_led)
+        preset_menu.addAction(act_off)
+
+        # Profile / Layer Submenu
+        layer_menu = self.tray_menu.addMenu("🔀 Warstwa Klawiatury")
+        for lid, lname in AVAILABLE_LAYERS[:4]:
+            act = QAction(lname, self)
+            act.triggered.connect(lambda _, l=lid: self.on_tray_layer_selected(l))
+            layer_menu.addAction(act)
+
+        self.tray_menu.addSeparator()
+
+        self.tray_show_action = QAction("🖥️ Pokaż / Ukryj okno", self)
+        self.tray_show_action.triggered.connect(self.toggle_window_visibility)
+        self.tray_menu.addAction(self.tray_show_action)
+
+        act_apply = QAction("💾 Wgraj bieżącą konfigurację", self)
+        act_apply.triggered.connect(self.apply_full_configuration)
+        self.tray_menu.addAction(act_apply)
+
+        self.tray_menu.addSeparator()
+
+        act_exit = QAction("🚪 Zakończ program", self)
+        act_exit.triggered.connect(QApplication.instance().quit)
+        self.tray_menu.addAction(act_exit)
+
+        self.tray_icon.setContextMenu(self.tray_menu)
+        self.tray_icon.activated.connect(self.on_tray_icon_activated)
+        self.tray_icon.show()
+
+        # Background status timer (updates every 4 seconds)
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(self.refresh_system_status)
+        self.status_timer.start(4000)
+        self.refresh_system_status()
+
+    def refresh_system_status(self):
+        """Update battery and connection status on both main window and tray."""
+        try:
+            bat_info = get_system_battery_info()
+            if bat_info["has_battery"]:
+                bat_text = f"{bat_info['icon']} Bateria: {bat_info['percentage']}% ({bat_info['status']})"
+                self.lbl_battery_header.setText(bat_text)
+                self.tray_battery_action.setText(bat_text)
+                tooltip = f"Skyloong GK104 Pro Studio\n{bat_text}"
+            else:
+                self.lbl_battery_header.setText("🔌 Zasilanie sieciowe")
+                self.tray_battery_action.setText("🔌 Zasilanie sieciowe (Brak baterii)")
+                tooltip = "Skyloong GK104 Pro Studio\nZasilanie sieciowe"
+
+            current_bright = self.backend.lighting_config.get("brightness", 100)
+            tooltip += f"\n💡 Jasność RGB: {current_bright}%"
+            self.tray_icon.setToolTip(tooltip)
+        except Exception as e:
+            print(f"Error in refresh_system_status: {e}")
+
+    def on_tray_brightness_selected(self, value: int):
+        self.set_brightness_level(value)
+        self.tray_icon.showMessage(
+            "Jasność Klawiatury",
+            f"Ustawiono jasność podświetlenia na {value}%",
+            QSystemTrayIcon.Information,
+            1500
+        )
+
+    def on_tray_preset_selected(self, preset_name: str):
+        if preset_name in COLOR_PRESETS:
+            self.apply_preset_theme(preset_name)
+            self.apply_static_keyboard_colors()
+        else:
+            self.backend.set_lighting_preset(preset_name, layer="Base", auto_apply=True)
+        self.tray_icon.showMessage(
+            "Profil RGB",
+            f"Zastosowano profil '{preset_name}'",
+            QSystemTrayIcon.Information,
+            1500
+        )
+
+    def on_tray_layer_selected(self, layer_id: str):
+        idx = self.remap_layer_combo.findData(layer_id)
+        if idx >= 0:
+            self.remap_layer_combo.setCurrentIndex(idx)
+        self.tray_icon.showMessage(
+            "Warstwa Klawiatury",
+            f"Wybrano warstwę: {layer_id}",
+            QSystemTrayIcon.Information,
+            1500
+        )
+
+    def toggle_window_visibility(self):
+        if self.isVisible():
+            self.hide()
+        else:
+            self.showNormal()
+            self.activateWindow()
+
+    def on_tray_icon_activated(self, reason: QSystemTrayIcon.ActivationReason):
+        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
+            self.toggle_window_visibility()
+
+    def closeEvent(self, event):
+        """Minimize to tray instead of quitting on window close."""
+        if self.tray_icon.isVisible():
+            self.hide()
+            self.tray_icon.showMessage(
+                "Skyloong Studio działa w tle",
+                "Aplikacja została zminimalizowana do zasobnika systemowego KDE. Kliknij ikonę, aby ją otworzyć.",
+                QSystemTrayIcon.Information,
+                2000
+            )
+            event.ignore()
+        else:
+            event.accept()
