@@ -1,5 +1,6 @@
 import math
 import os
+import sys
 import time
 from typing import Dict, List, Optional
 from PySide6.QtWidgets import (
@@ -9,11 +10,12 @@ from PySide6.QtWidgets import (
     QScrollArea, QMessageBox, QProgressBar, QButtonGroup, QSizePolicy,
     QTableWidget, QTableWidgetItem, QHeaderView, QSpinBox, QCheckBox,
     QGroupBox, QSplitter, QTextEdit, QPlainTextEdit, QFileDialog,
-    QRadioButton, QSlider, QMenu, QSystemTrayIcon
+    QRadioButton, QSlider, QMenu, QSystemTrayIcon, QDialog
 )
 from PySide6.QtCore import Qt, QSize, Signal, QTimer, QObject
 from PySide6.QtGui import QColor, QFont, QIcon, QPixmap, QAction, QPainter, QLinearGradient, QBrush, QPen
 
+from system_checker import SystemChecker
 from gk_backend import (
     GKBackend, KEY_DEFINITIONS, COLOR_PRESETS, AVAILABLE_LAYERS,
     TARGET_KEY_CATEGORIES, POPULAR_SHORTCUTS, MacroItem, MacroAction,
@@ -338,6 +340,184 @@ class LiveRGBAnimationController(QObject):
             btn.set_color(c.name())
 
 
+class ComponentInstallerDialog(QDialog):
+    """Interactive assistant for checking and installing Mono, udev rules and USB permissions."""
+    def __init__(self, parent=None, auto_prompt_install=False):
+        super().__init__(parent)
+        self.setWindowTitle("⚙️ Konfiguracja Komponentów & Uprawnień — Skyloong GK104 Pro")
+        self.resize(680, 520)
+        self.auto_prompt_install = auto_prompt_install
+        self.init_ui()
+        self.refresh_diagnostics()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(14)
+        layout.setContentsMargins(18, 18, 18, 18)
+
+        # Header title
+        title_box = QVBoxLayout()
+        header = QLabel("Diagnostyka Wymagań i Uprawnień Systemowych")
+        header.setStyleSheet("font-size: 16px; font-weight: bold; color: #7aa2f7;")
+        sub = QLabel("Aplikacja wymaga środowiska Mono oraz reguł Udev do bezpośredniej komunikacji z klawiaturą przez USB/hidraw.")
+        sub.setStyleSheet("color: #a9b1d6; font-size: 12px;")
+        sub.setWordWrap(True)
+        title_box.addWidget(header)
+        title_box.addWidget(sub)
+        layout.addLayout(title_box)
+
+        # Diagnostic items group
+        self.status_group = QGroupBox("Stan komponentów systemowych")
+        status_layout = QVBoxLayout(self.status_group)
+        status_layout.setSpacing(10)
+
+        # Mono status
+        self.lbl_mono_status = QLabel("Środowisko Mono Runtime: Sprawdzanie...")
+        self.lbl_mono_status.setStyleSheet("font-size: 13px;")
+        status_layout.addWidget(self.lbl_mono_status)
+
+        # Udev rules status
+        self.lbl_udev_status = QLabel("Reguły Udev (/etc/udev/rules.d/99-skyloong.rules): Sprawdzanie...")
+        self.lbl_udev_status.setStyleSheet("font-size: 13px;")
+        status_layout.addWidget(self.lbl_udev_status)
+
+        # Hidraw permission status
+        self.lbl_perm_status = QLabel("Dostęp do urządzeń /dev/hidraw: Sprawdzanie...")
+        self.lbl_perm_status.setStyleSheet("font-size: 13px;")
+        status_layout.addWidget(self.lbl_perm_status)
+
+        # GK6X engine status
+        self.lbl_gk6x_status = QLabel("Silnik GK6X & Efekty LED: Sprawdzanie...")
+        self.lbl_gk6x_status.setStyleSheet("font-size: 13px;")
+        status_layout.addWidget(self.lbl_gk6x_status)
+
+        layout.addWidget(self.status_group)
+
+        # Log & Instruction box
+        self.txt_details = QTextEdit()
+        self.txt_details.setReadOnly(True)
+        self.txt_details.setStyleSheet("background-color: #13141c; color: #c0caf5; font-family: monospace; font-size: 11px; border: 1px solid #24283b; border-radius: 6px;")
+        self.txt_details.setFixedHeight(120)
+        layout.addWidget(self.txt_details)
+
+        # Progress bar
+        self.install_progress = QProgressBar()
+        self.install_progress.setRange(0, 0)
+        self.install_progress.setVisible(False)
+        layout.addWidget(self.install_progress)
+
+        # Action Buttons
+        btn_box = QHBoxLayout()
+        self.btn_install = QPushButton("🚀 Zainstaluj i napraw automatycznie")
+        self.btn_install.setStyleSheet("background-color: #7aa2f7; color: #15161e; font-weight: bold; padding: 8px 16px; border-radius: 6px;")
+        self.btn_install.clicked.connect(self.on_install_clicked)
+        btn_box.addWidget(self.btn_install)
+
+        self.btn_refresh = QPushButton("🔄 Sprawdź ponownie")
+        self.btn_refresh.clicked.connect(self.refresh_diagnostics)
+        btn_box.addWidget(self.btn_refresh)
+
+        btn_box.addStretch()
+
+        self.btn_close = QPushButton("Zamknij")
+        self.btn_close.clicked.connect(self.accept)
+        btn_box.addWidget(self.btn_close)
+
+        layout.addLayout(btn_box)
+
+    def refresh_diagnostics(self):
+        diag = SystemChecker.get_full_diagnostics()
+        
+        # Mono
+        if diag["mono"]["installed"]:
+            self.lbl_mono_status.setText(f"🟢 Środowisko Mono Runtime: Zainstalowane ({diag['mono']['version']})")
+            self.lbl_mono_status.setStyleSheet("color: #9ece6a; font-weight: bold; font-size: 13px;")
+        else:
+            self.lbl_mono_status.setText("🔴 Środowisko Mono Runtime: BRAK (Wymagane do wgrywania konfiguracji przez GK6X)")
+            self.lbl_mono_status.setStyleSheet("color: #f7768e; font-weight: bold; font-size: 13px;")
+
+        # Udev
+        if diag["udev"]["installed"]:
+            self.lbl_udev_status.setText(f"🟢 Reguły Udev: Skonfigurowane ({diag['udev']['path']})")
+            self.lbl_udev_status.setStyleSheet("color: #9ece6a; font-weight: bold; font-size: 13px;")
+        else:
+            self.lbl_udev_status.setText("🔴 Reguły Udev: BRAK (/etc/udev/rules.d/99-skyloong.rules nie istnieje)")
+            self.lbl_udev_status.setStyleSheet("color: #f7768e; font-weight: bold; font-size: 13px;")
+
+        # Hidraw permissions
+        if diag["permissions"]["has_access"]:
+            self.lbl_perm_status.setText("🟢 Uprawnienia USB / hidraw: Pełny dostęp dla użytkownika (RW)")
+            self.lbl_perm_status.setStyleSheet("color: #9ece6a; font-weight: bold; font-size: 13px;")
+        else:
+            nodes_str = ", ".join(diag["permissions"]["found_nodes"]) if diag["permissions"]["found_nodes"] else "węzły hidraw"
+            self.lbl_perm_status.setText(f"🟡 Uprawnienia USB / hidraw: Brak uprawnień do {nodes_str}")
+            self.lbl_perm_status.setStyleSheet("color: #e0af68; font-weight: bold; font-size: 13px;")
+
+        # GK6X engine
+        from gk_backend import APP_DIR, EXE_PATH, LIGHTING_DIR
+        has_exe = os.path.exists(EXE_PATH)
+        effects_count = len(os.listdir(LIGHTING_DIR)) if os.path.exists(LIGHTING_DIR) else 0
+        if has_exe and effects_count > 0:
+            self.lbl_gk6x_status.setText(f"🟢 Silnik GK6X: Gotowy ({effects_count} efektów oświetlenia .le)")
+            self.lbl_gk6x_status.setStyleSheet("color: #9ece6a; font-weight: bold; font-size: 13px;")
+        else:
+            self.lbl_gk6x_status.setText("🔴 Silnik GK6X: Brak bazy efektów lub GK6X.exe")
+            self.lbl_gk6x_status.setStyleSheet("color: #f7768e; font-weight: bold; font-size: 13px;")
+
+        # Details
+        pkg_mgr, mono_cmd = SystemChecker.detect_package_manager()
+        msg = []
+        if diag["all_ok"]:
+            msg.append("✅ Wszystkie wymagane komponenty są zainstalowane i prawidłowo skonfigurowane!")
+            msg.append("Klawiatura Skyloong GK104 Pro jest gotowa do pełnej obsługi.")
+            self.btn_install.setText("✅ Wszystko skonfigurowane")
+            self.btn_install.setEnabled(False)
+        else:
+            msg.append("⚠️ Wykryto brakujące komponenty lub brak uprawnień Udev:")
+            for item in diag["missing_items"]:
+                msg.append(f"  • {item}")
+            msg.append("")
+            msg.append(f"Wykryty menedżer pakietów: {pkg_mgr or 'Brak'}")
+            if mono_cmd:
+                msg.append(f"Polecenie instalacji Mono: sudo {mono_cmd}")
+            msg.append("Możesz kliknąć 'Zainstaluj i napraw automatycznie' (wymagane hasło administratora)")
+            msg.append("lub uruchomić w terminalu: sudo ./install_rules.sh")
+            self.btn_install.setText("🚀 Zainstaluj i napraw automatycznie")
+            self.btn_install.setEnabled(True)
+
+        self.txt_details.setPlainText("\n".join(msg))
+
+    def on_install_clicked(self):
+        reply = QMessageBox.question(
+            self,
+            "Potwierdzenie instalacji",
+            "Aplikacja zainstaluje wymagany pakiet Mono oraz doda reguły Udev do /etc/udev/rules.d/99-skyloong.rules.\n\n"
+            "Czy chcesz kontynuować? (Zostaniesz poproszony o hasło administratora w oknie autoryzacji)",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        self.install_progress.setVisible(True)
+        self.btn_install.setEnabled(False)
+        self.txt_details.append("\n-> Uruchamianie instalatora z uprawnieniami administratora...")
+        QApplication.processEvents()
+
+        ok, msg = SystemChecker.run_installation()
+        self.install_progress.setVisible(False)
+        self.btn_install.setEnabled(True)
+
+        if ok:
+            QMessageBox.information(self, "Instalacja zakończona", msg)
+            self.refresh_diagnostics()
+            if self.parent() and hasattr(self.parent(), "refresh_device"):
+                self.parent().refresh_device()
+        else:
+            QMessageBox.warning(self, "Błąd instalacji", f"{msg}\n\nMożesz także uruchomić ręcznie w terminalu:\nsudo ./install_rules.sh")
+            self.refresh_diagnostics()
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -380,6 +560,9 @@ class MainWindow(QMainWindow):
         self.refresh_remap_ui()
         self.refresh_macro_list_ui()
 
+        # Check startup environment and dependencies
+        QTimer.singleShot(700, self.check_startup_components)
+
     def init_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -416,6 +599,11 @@ class MainWindow(QMainWindow):
         header_layout.addStretch()
 
         # Global Action Buttons
+        self.btn_check_system = QPushButton("⚙️ Wymagania & Uprawnienia")
+        self.btn_check_system.setStyleSheet("background-color: #24283b; color: #7aa2f7; border: 1px solid #3b4261; border-radius: 6px; padding: 6px 12px;")
+        self.btn_check_system.clicked.connect(self.open_components_dialog)
+        header_layout.addWidget(self.btn_check_system)
+
         self.btn_refresh_dev = QPushButton("🔄 Odśwież połączenie")
         self.btn_refresh_dev.clicked.connect(self.refresh_device)
         header_layout.addWidget(self.btn_refresh_dev)
@@ -1188,17 +1376,42 @@ class MainWindow(QMainWindow):
         self.backend.apply_finished.connect(self.on_apply_finished)
         self.backend.unmap_finished.connect(self.on_unmap_finished)
 
+    def open_components_dialog(self):
+        dlg = ComponentInstallerDialog(self)
+        dlg.exec()
+
+    def check_startup_components(self):
+        diag = SystemChecker.get_full_diagnostics()
+        if not diag["all_ok"]:
+            items_str = "\n".join([f"• {item}" for item in diag["missing_items"]])
+            reply = QMessageBox.question(
+                self,
+                "⚙️ Wymagane komponenty systemowe",
+                f"Wykryto brakujące komponenty lub uprawnienia do pełnej obsługi klawiatury:\n\n{items_str}\n\n"
+                "Czy chcesz otworzyć asystenta instalacji i skonfigurować je automatycznie?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes:
+                self.open_components_dialog()
+
     def refresh_device(self):
         self.device_status_lbl.setText("Sprawdzanie połączenia USB...")
+        self.device_status_lbl.setStyleSheet("color: #7aa2f7; font-size: 12px;")
+        QApplication.processEvents()
         self.backend.detect_device()
 
     def on_device_status(self, is_connected: bool, model_id: str, model_name: str):
         if is_connected:
-            self.device_status_lbl.setText(f"🟢 Połączono: {model_name} (ID: {model_id})")
-            self.device_status_lbl.setStyleSheet("color: #9ece6a; font-weight: bold;")
+            if getattr(self.backend, "has_permission_issue", False):
+                self.device_status_lbl.setText(f"🟡 Wykryto: {model_name} [Brak uprawnień Udev — kliknij ⚙️]")
+                self.device_status_lbl.setStyleSheet("color: #e0af68; font-weight: bold; font-size: 12px;")
+            else:
+                self.device_status_lbl.setText(f"🟢 Połączono: {model_name} (ID: {model_id})")
+                self.device_status_lbl.setStyleSheet("color: #9ece6a; font-weight: bold; font-size: 12px;")
         else:
-            self.device_status_lbl.setText(f"🔴 Rozłączono / Brak urządzenia (ID: {model_id})")
-            self.device_status_lbl.setStyleSheet("color: #f7768e; font-weight: bold;")
+            self.device_status_lbl.setText(f"🔴 Rozłączono / Brak urządzenia (ID: {model_id}) — Sprawdź ⚙️")
+            self.device_status_lbl.setStyleSheet("color: #f7768e; font-weight: bold; font-size: 12px;")
 
     def on_space_mode_toggled(self):
         sender = self.sender()

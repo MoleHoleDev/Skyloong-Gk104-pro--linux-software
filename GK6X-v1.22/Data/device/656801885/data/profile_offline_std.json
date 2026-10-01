@@ -1,0 +1,29 @@
+{
+	"GUID": "",
+	"ModeIndex": 1,
+	"Name": "标准配置",
+	"Active": 0,
+	"DriverLE": [
+		{
+			"GUID": "15AF7F87-B386-466c-9A8F-DD7CD55339D3",
+			"Name": "SK61S-PTIR-D"
+		},
+		{
+			"GUID": "4B193D50-EF01-4617-8E7C-8552290EDE76",
+			"Name": "Macice Blue"
+		},
+		{
+			"GUID": "014D58A9-7E44-43c7-BA92-1063623B02DD",
+			"Name": "RGB渐变"
+		},
+		{
+			"GUID": "A494ACB6-6A5B-4b2c-9E74-D8ED3DB84C5F",
+			"Name": "AC61M-UK 光谱循环"
+		},
+		{
+			"GUID": "DEF006E5-2F0E-4c5c-8A7C-6FB0C6F7F532",
+			"Name": "AC61M-UK 风车"
+		}
+		
+	]
+}

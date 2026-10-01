@@ -78,12 +78,25 @@ Zaawansowana, natywna aplikacja graficzna w **Pythonie (PySide6)** stworzona dla
 
 ---
 
-## Uruchomienie
+## Uruchomienie & Wymagania
+
+Aplikacja posiada wbudowanego **Asystenta Diagnostyki i Instalacji**, który automatycznie sprawdza obecność wymaganych komponentów (Mono Runtime, reguły Udev dla USB/hidraw) i pozwala zainstalować je jednym kliknięciem:
 
 - **Z Pulpitu:** Kliknij dwukrotnie skrót `Skyloong GK104 Pro Studio`.
 - **Z Terminala:**
   ```bash
-  python3 "/home/kret/Pulpit/PROJEKTY/Skyloong-Gk104-pro--linux-software/main.py"
+  python3 main.py
   # lub
-  "/home/kret/Pulpit/PROJEKTY/Skyloong-Gk104-pro--linux-software/run.sh"
+  ./run.sh
   ```
+
+### Ręczna instalacja zależności (opcjonalnie):
+W przypadku chęci ręcznej konfiguracji uprawnień Udev i środowiska Mono:
+```bash
+sudo ./install_rules.sh
+```
+lub dla dystrybucji Arch / CachyOS:
+```bash
+sudo pacman -S mono
+sudo cp install_rules.sh /tmp/ && sudo ./install_rules.sh
+```
