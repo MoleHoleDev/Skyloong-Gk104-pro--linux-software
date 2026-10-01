@@ -26,14 +26,24 @@ from gk_backend import (
 # Friendly short names for visual keyboard display and tooltips
 ACTION_SHORT_LABELS = {
     # Light / Backlight
+    "ToggleLighting": "💡LED OnOff",
+    "BrightnessUp": "☀️Jas+",
+    "BrightnessDown": "🌙Jas-",
+    "LightingSpeedIncrease": "⏩Szyb+",
+    "LightingSpeedDecrease": "⏪Szyb-",
+    "LightingPauseResume": "⏸️Pauza",
+    "NextLightingEffect": "🌈LED Efekt",
+    "NextReactiveLightingEffect": "✨LED Reakcja",
+    "Disabled": "🚫Wyłączony",
+    # Legacy hex support
     "0x09060002": "💡LED OnOff",
     "0x09020001": "☀️Jas+",
     "0x09020002": "🌙Jas-",
     "0x09030001": "⏩Szyb+",
     "0x09030002": "⏪Szyb-",
-    "0x09060001": "⏸️LED Pauza",
+    "0x09060001": "⏸️Pauza",
     "0x09010010": "🌈LED Efekt",
-    "0x09010011": "✨LED Tryb",
+    "0x09010011": "✨LED Reakcja",
     "0x02000000": "🚫Wyłączony",
     # Media
     "VolumeUp": "🔊Vol+",
@@ -57,10 +67,14 @@ ACTION_SHORT_LABELS = {
     "BrowserSearch": "🔍Szukaj",
     "Screenshot": "📸PrtSc",
     # Mouse
+    "MouseLClick": "🖱️L-Klik",
+    "MouseRClick": "🖱️P-Klik",
+    "MouseMClick": "🖱️Ś-Klik",
+    "MouseBack": "◀️M-Wstecz",
+    "MouseAdvance": "▶️M-Dalej",
     "LeftClick": "🖱️L-Klik",
     "RightClick": "🖱️P-Klik",
     "MiddleClick": "🖱️Ś-Klik",
-    "MouseBack": "◀️M-Wstecz",
     "MouseForward": "▶️M-Dalej"
 }
 
@@ -2431,6 +2445,9 @@ class MainWindow(QMainWindow):
         for act_suffix, target_code in preset.items():
             aid = f"{knob_id}_{act_suffix}"
             self.backend.set_key_remap(self.current_remap_layer, aid, target_code)
+            # Ensure Base layer also receives the knob remap so hardware default layer uses it
+            if self.current_remap_layer != "Base":
+                self.backend.set_key_remap("Base", aid, target_code)
 
         self.refresh_remap_ui()
 
@@ -2440,7 +2457,7 @@ class MainWindow(QMainWindow):
         combo_box.blockSignals(False)
 
         self.lbl_bottom_info.setText(
-            f"✅ Zastosowano schemat '{preset_name}' dla {knob_id} na warstwie {self.current_remap_layer}."
+            f"✅ Zastosowano schemat '{preset_name}' dla {knob_id} (warstwy {self.current_remap_layer} & Base)."
         )
 
     def copy_knobs_to_all_layers(self):

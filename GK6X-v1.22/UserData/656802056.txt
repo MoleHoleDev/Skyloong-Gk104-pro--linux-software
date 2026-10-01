@@ -39,13 +39,61 @@ Press:LCtrl+LShift+Escape
 # ==========================
 # KEY REMAPPINGS
 # ==========================
+[Base]
+Knob4_CW:BrightnessUp
+Knob4_CCW:BrightnessDown
+Knob4_Click:ToggleLighting
+Knob1_CW:BrightnessUp
+Knob1_CCW:BrightnessDown
+Knob1_Click:ToggleLighting
+Knob5_CW:BrightnessUp
+Knob5_CCW:BrightnessDown
+Knob5_Click:ToggleLighting
+Knob6_CW:LCtrl+Add
+Knob6_CCW:LCtrl+Subtract
+Knob6_Click:LCtrl+D0
+
 [Layer1]
-Knob1_CW:VolumeUp
-Knob1_CCW:VolumeDown
-Knob1_Click:VolumeMute
-Knob4_CW:PageDown
-Knob4_CCW:PageUp
-Knob4_Click:Enter
+Knob1_CW:BrightnessUp
+Knob1_CCW:BrightnessDown
+Knob1_Click:ToggleLighting
+Knob4_CW:BrightnessUp
+Knob4_CCW:BrightnessDown
+Knob4_Click:ToggleLighting
+Knob5_CW:BrightnessUp
+Knob5_CCW:BrightnessDown
+Knob5_Click:ToggleLighting
+Knob6_CW:LCtrl+Add
+Knob6_CCW:LCtrl+Subtract
+Knob6_Click:LCtrl+D0
+
+[Layer2]
+Knob1_CW:BrightnessUp
+Knob1_CCW:BrightnessDown
+Knob1_Click:ToggleLighting
+Knob4_CW:BrightnessUp
+Knob4_CCW:BrightnessDown
+Knob4_Click:ToggleLighting
+Knob5_CW:BrightnessUp
+Knob5_CCW:BrightnessDown
+Knob5_Click:ToggleLighting
+Knob6_CW:LCtrl+Add
+Knob6_CCW:LCtrl+Subtract
+Knob6_Click:LCtrl+D0
+
+[Layer3]
+Knob1_CW:BrightnessUp
+Knob1_CCW:BrightnessDown
+Knob1_Click:ToggleLighting
+Knob4_CW:BrightnessUp
+Knob4_CCW:BrightnessDown
+Knob4_Click:ToggleLighting
+Knob5_CW:BrightnessUp
+Knob5_CCW:BrightnessDown
+Knob5_Click:ToggleLighting
+Knob6_CW:LCtrl+Add
+Knob6_CCW:LCtrl+Subtract
+Knob6_Click:LCtrl+D0
 
 # ==========================
 # LIGHTING CONFIGURATION

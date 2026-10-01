@@ -248,19 +248,19 @@ KNOB_PRESETS = {
         "Click": "MediaPlayPause"
     },
     "💡 Jasność Podświetlenia (Backlight)": {
-        "CW": "0x09020001",
-        "CCW": "0x09020002",
-        "Click": "0x09060002"
+        "CW": "BrightnessUp",
+        "CCW": "BrightnessDown",
+        "Click": "ToggleLighting"
     },
     "✨ Szybkość Animacji LED (Speed)": {
-        "CW": "0x09030001",
-        "CCW": "0x09030002",
-        "Click": "0x09060001"
+        "CW": "LightingSpeedIncrease",
+        "CCW": "LightingSpeedDecrease",
+        "Click": "LightingPauseResume"
     },
     "🌈 Przełączanie Profili LED (Effects)": {
-        "CW": "0x09010010",
-        "CCW": "0x09010010",
-        "Click": "0x09060002"
+        "CW": "NextLightingEffect",
+        "CCW": "NextReactiveLightingEffect",
+        "Click": "ToggleLighting"
     },
     "Przeglądarka WWW (Browser Nav)": {
         "CW": "BrowserForward",
@@ -469,14 +469,14 @@ TARGET_KEY_CATEGORIES = {
         ("Eject", "⏏️ Wysuń nośnik (Eject)")
     ],
     "💡 Light / Backlight (Zarządzanie Podświetleniem)": [
-        ("0x09060002", "💡 Włącz / Wyłącz podświetlenie (Toggle)"),
-        ("0x09020001", "☀️ Zwiększ jasność podświetlenia (Jasność +)"),
-        ("0x09020002", "🌙 Zmniejsz jasność podświetlenia (Jasność -)"),
-        ("0x09030001", "⏩ Zwiększ szybkość animacji LED (Szybkość +)"),
-        ("0x09030002", "⏪ Zmniejsz szybkość animacji LED (Szybkość -)"),
-        ("0x09060001", "⏸️ Wstrzymaj / Wznów animację LED (Pauza)"),
-        ("0x09010010", "🌈 Przełącz następny profil / efekt oświetlenia"),
-        ("0x09010011", "✨ Przełącz tryb efektu podświetlenia")
+        ("ToggleLighting", "💡 Włącz / Wyłącz podświetlenie (Toggle)"),
+        ("BrightnessUp", "☀️ Zwiększ jasność podświetlenia (Jasność +)"),
+        ("BrightnessDown", "🌙 Zmniejsz jasność podświetlenia (Jasność -)"),
+        ("LightingSpeedIncrease", "⏩ Zwiększ szybkość animacji LED (Szybkość +)"),
+        ("LightingSpeedDecrease", "⏪ Zmniejsz szybkość animacji LED (Szybkość -)"),
+        ("LightingPauseResume", "⏸️ Wstrzymaj / Wznów animację LED (Pauza)"),
+        ("NextLightingEffect", "🌈 Przełącz następny profil / efekt oświetlenia"),
+        ("NextReactiveLightingEffect", "✨ Przełącz tryb efektu podświetlenia")
     ],
     "🌐 System / Net (System i Internet)": [
         ("OpenCalculator", "🧮 Otwórz Kalkulator"),
@@ -496,14 +496,14 @@ TARGET_KEY_CATEGORIES = {
         ("F21", "F21"), ("F22", "F22"), ("F23", "F23"), ("F24", "F24")
     ],
     "🖱️ Mouse (Sterowanie Myszą)": [
-        ("LeftClick", "🖱️ Lewy przycisk myszy (Left Click)"),
-        ("RightClick", "🖱️ Prawy przycisk myszy (Right Click)"),
-        ("MiddleClick", "🖱️ Środkowy przycisk myszy (Middle Click)"),
+        ("MouseLClick", "🖱️ Lewy przycisk myszy (Left Click)"),
+        ("MouseRClick", "🖱️ Prawy przycisk myszy (Right Click)"),
+        ("MouseMClick", "🖱️ Środkowy przycisk myszy (Middle Click)"),
         ("MouseBack", "◀️ Mysz Wstecz (Button 4)"),
-        ("MouseForward", "▶️ Mysz Dalej (Button 5)")
+        ("MouseAdvance", "▶️ Mysz Dalej (Button 5)")
     ],
     "🚫 Disable (Wyłączenie klawisza)": [
-        ("0x02000000", "🚫 Wyłącz działanie klawisza (Brak akcji)")
+        ("Disabled", "🚫 Wyłącz działanie klawisza (Brak akcji)")
     ]
 }
 
@@ -578,6 +578,32 @@ COLOR_PRESETS = {
         "func": "#ff2222",
         "numpad": "#880000"
     }
+}
+
+
+# Mapping for raw hex / legacy aliases to canonical GK6X DriverValue names
+HEX_OR_ALIAS_TO_CANONICAL = {
+    # Lighting / Backlight
+    "0x09020001": "BrightnessUp",
+    "0x09020002": "BrightnessDown",
+    "0x09060002": "ToggleLighting",
+    "0x09060001": "LightingPauseResume",
+    "0x09030001": "LightingSpeedIncrease",
+    "0x09030002": "LightingSpeedDecrease",
+    "0x09010010": "NextLightingEffect",
+    "0x09010011": "NextReactiveLightingEffect",
+    # Disabled
+    "0x02000000": "Disabled",
+    # Mouse
+    "0x01010001": "MouseLClick",
+    "0x01010002": "MouseRClick",
+    "0x01010004": "MouseMClick",
+    "0x01010008": "MouseBack",
+    "0x01010010": "MouseAdvance",
+    "LeftClick": "MouseLClick",
+    "RightClick": "MouseRClick",
+    "MiddleClick": "MouseMClick",
+    "MouseForward": "MouseAdvance",
 }
 
 
@@ -1059,8 +1085,30 @@ class GKBackend(QObject):
         has_remaps = any(len(mappings) > 0 for mappings in self.remaps.values())
         if has_remaps:
             blocks.append("# ==========================\n# KEY REMAPPINGS\n# ==========================")
+
+            # Build synchronized map for knobs across layers so knobs work consistently
+            # on Base, Layer1, Layer2, and Layer3
+            effective_remaps: Dict[str, Dict[str, str]] = {}
             for layer_id, _ in AVAILABLE_LAYERS:
-                layer_map = self.remaps.get(layer_id, {})
+                effective_remaps[layer_id] = dict(self.remaps.get(layer_id, {}))
+
+            # Gather all knob remaps across layers
+            all_knob_remaps: Dict[str, str] = {}
+            for layer_id in ["Layer1", "Base", "Layer2", "Layer3"]:
+                for k, v in self.remaps.get(layer_id, {}).items():
+                    if k.startswith("Knob") and k not in all_knob_remaps:
+                        all_knob_remaps[k] = v
+
+            # Ensure all standard layers have knob remaps if configured anywhere
+            for layer_id in ["Base", "Layer1", "Layer2", "Layer3"]:
+                if layer_id not in effective_remaps:
+                    effective_remaps[layer_id] = {}
+                for k, v in all_knob_remaps.items():
+                    if k not in effective_remaps[layer_id]:
+                        effective_remaps[layer_id][k] = v
+
+            for layer_id, _ in AVAILABLE_LAYERS:
+                layer_map = effective_remaps.get(layer_id, {})
                 if layer_map:
                     layer_block = [f"[{layer_id}]"]
                     for src, dst in layer_map.items():
@@ -1072,7 +1120,10 @@ class GKBackend(QObject):
                             mapped_src = "LeftSpace"
                         elif src == "Space_19":
                             mapped_src = "RightSpace"
-                        layer_block.append(f"{mapped_src}:{dst}")
+
+                        # Canonicalize action code
+                        mapped_dst = HEX_OR_ALIAS_TO_CANONICAL.get(dst, dst)
+                        layer_block.append(f"{mapped_src}:{mapped_dst}")
                     blocks.append("\n".join(layer_block) + "\n")
 
         # 4. Lighting Configuration
