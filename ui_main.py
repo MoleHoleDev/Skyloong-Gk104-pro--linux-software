@@ -101,9 +101,9 @@ class KeyVisualButton(QPushButton):
         self.row = 0
         self.col = 0.0
 
-        # Square keycap proportions: 1u is ~38x38 px
-        base_w = int(38 * width_u)
-        base_h = int(38 * height_u)
+        # Square keycap proportions: 1u is ~36x38 px
+        base_w = max(int(36 * width_u), 28)
+        base_h = max(int(38 * height_u), 36)
         self.setMinimumSize(base_w, base_h)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
@@ -140,8 +140,8 @@ class KeyVisualButton(QPushButton):
             short_act = ACTION_SHORT_LABELS.get(self.remap_action, self.remap_action)
             if short_act.startswith("Macro(") and short_act.endswith(")"):
                 short_act = "⚡" + short_act[6:-1]
-            if len(short_act) > 8:
-                short_act = short_act[:7] + ".."
+            if len(short_act) > 9:
+                short_act = short_act[:8] + ".."
             lines.append(short_act)
 
         self.setText("\n".join(lines))
@@ -178,7 +178,7 @@ class KeyVisualButton(QPushButton):
                 border-radius: 5px;
                 font-size: 9px;
                 font-weight: bold;
-                padding: 1px;
+                padding: 1px 2px;
             }}
             QPushButton:hover {{
                 border: 2px solid #7dcfff;
@@ -192,8 +192,9 @@ class GK104ChassisWidget(QFrame):
         super().__init__(parent)
         self.setObjectName("gk104Chassis")
         self.setFrameShape(QFrame.StyledPanel)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         self.layout_inner = QVBoxLayout(self)
-        self.layout_inner.setContentsMargins(14, 10, 14, 12)
+        self.layout_inner.setContentsMargins(12, 10, 12, 12)
         self.layout_inner.setSpacing(6)
 
         # Top chassis bar: Logo, Smart Screen, Indicators
@@ -248,6 +249,7 @@ class GK104ChassisWidget(QFrame):
 
         # Switch Plate Container (sunken dark grid container for keys)
         self.plate_frame = QFrame()
+        self.plate_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         self.plate_frame.setStyleSheet("""
             QFrame {
                 background-color: #0b0c12;
@@ -581,7 +583,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Skyloong GK104 Pro Studio — RGB • Remap • Makra • Knoby")
         self.resize(1200, 880)
-        self.setMinimumSize(1040, 740)
+        self.setMinimumSize(960, 680)
 
         self.backend = GKBackend()
         self.space_mode = getattr(self.backend, "space_mode", "split")
@@ -632,48 +634,54 @@ class MainWindow(QMainWindow):
         header_frame = QFrame()
         header_frame.setObjectName("headerFrame")
         header_layout = QHBoxLayout(header_frame)
-        header_layout.setContentsMargins(10, 8, 10, 8)
+        header_layout.setContentsMargins(12, 8, 12, 8)
+        header_layout.setSpacing(10)
 
         # App Title & Device info
         title_box = QVBoxLayout()
         title_lbl = QLabel("Skyloong GK104 Pro Studio")
         title_lbl.setObjectName("appTitle")
-        title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #7aa2f7;")
+        title_lbl.setStyleSheet("font-size: 17px; font-weight: bold; color: #7aa2f7;")
         title_box.addWidget(title_lbl)
 
         self.device_status_lbl = QLabel("Wykrywanie urządzenia GK104 Pro...")
         self.device_status_lbl.setObjectName("deviceStatus")
-        self.device_status_lbl.setStyleSheet("color: #9ece6a; font-size: 12px;")
+        self.device_status_lbl.setStyleSheet("color: #9ece6a; font-size: 11px;")
         title_box.addWidget(self.device_status_lbl)
         header_layout.addLayout(title_box)
 
-        header_layout.addSpacing(15)
+        header_layout.addSpacing(10)
 
         # Battery Status Widget in Header
         self.lbl_battery_header = QLabel("🔋 Bateria: Sprawdzanie...")
-        self.lbl_battery_header.setStyleSheet("color: #7aa2f7; font-size: 12px; font-weight: bold; background-color: #13141c; padding: 6px 12px; border-radius: 6px; border: 1px solid #24283b;")
+        self.lbl_battery_header.setStyleSheet("color: #7aa2f7; font-size: 11px; font-weight: bold; background-color: #13141c; padding: 6px 10px; border-radius: 6px; border: 1px solid #24283b;")
         header_layout.addWidget(self.lbl_battery_header)
 
         header_layout.addStretch()
 
         # Global Action Buttons
-        self.btn_check_system = QPushButton("⚙️ Wymagania & Uprawnienia")
-        self.btn_check_system.setStyleSheet("background-color: #24283b; color: #7aa2f7; border: 1px solid #3b4261; border-radius: 6px; padding: 6px 12px;")
+        self.btn_check_system = QPushButton("⚙️ Wymagania")
+        self.btn_check_system.setToolTip("Sprawdź i skonfiguruj wymagania systemowe, Mono oraz reguły Udev")
+        self.btn_check_system.setStyleSheet("background-color: #24283b; color: #7aa2f7; border: 1px solid #3b4261; border-radius: 6px; padding: 6px 12px; min-height: 24px;")
         self.btn_check_system.clicked.connect(self.open_components_dialog)
         header_layout.addWidget(self.btn_check_system)
 
-        self.btn_refresh_dev = QPushButton("🔄 Odśwież połączenie")
+        self.btn_refresh_dev = QPushButton("🔄 Odśwież")
+        self.btn_refresh_dev.setToolTip("Odśwież połączenie z klawiaturą")
+        self.btn_refresh_dev.setStyleSheet("min-height: 24px; padding: 6px 12px;")
         self.btn_refresh_dev.clicked.connect(self.refresh_device)
         header_layout.addWidget(self.btn_refresh_dev)
 
-        self.btn_reset_mappings = QPushButton("⚠️ Reset Fabryczny (Unmap)")
+        self.btn_reset_mappings = QPushButton("⚠️ Reset (Unmap)")
+        self.btn_reset_mappings.setToolTip("Przywróć domyślny układ fabryczny")
         self.btn_reset_mappings.setObjectName("dangerBtn")
+        self.btn_reset_mappings.setStyleSheet("min-height: 24px; padding: 6px 12px;")
         self.btn_reset_mappings.clicked.connect(self.reset_factory_mappings)
         header_layout.addWidget(self.btn_reset_mappings)
 
         self.btn_apply_all = QPushButton("💾 WGRAJ DO KLAWIATURY")
         self.btn_apply_all.setObjectName("primaryBtn")
-        self.btn_apply_all.setStyleSheet("padding: 10px 20px; font-size: 13px; font-weight: bold;")
+        self.btn_apply_all.setStyleSheet("padding: 8px 18px; font-size: 12px; font-weight: bold; min-height: 24px;")
         self.btn_apply_all.clicked.connect(self.apply_full_configuration)
         header_layout.addWidget(self.btn_apply_all)
 
@@ -800,9 +808,11 @@ class MainWindow(QMainWindow):
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         container = QWidget()
-        container.setMinimumSize(980, 750)
+        container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
@@ -816,7 +826,7 @@ class MainWindow(QMainWindow):
 
         # Live Animation Preview Controls
         self.btn_toggle_anim = QPushButton("⏸ Wstrzymaj podgląd")
-        self.btn_toggle_anim.setStyleSheet("background-color: #2b3b55; color: #7dcfff; font-weight: bold; padding: 4px 10px;")
+        self.btn_toggle_anim.setStyleSheet("background-color: #2b3b55; color: #7dcfff; font-weight: bold; padding: 4px 10px; min-height: 24px;")
         self.btn_toggle_anim.clicked.connect(self.toggle_live_animation)
         top_ctrl_bar.addWidget(self.btn_toggle_anim)
 
@@ -853,7 +863,6 @@ class MainWindow(QMainWindow):
 
         # Authentic GK104 Pro Chassis with Smart Screen Mockup & Sunken Switch Plate
         self.rgb_chassis = GK104ChassisWidget()
-        self.rgb_chassis.setMinimumSize(960, 260)
         self.rgb_grid_layout = self.rgb_chassis.plate_layout
 
         self.build_keyboard_grid(
@@ -1022,12 +1031,14 @@ class MainWindow(QMainWindow):
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         container = QWidget()
-        container.setMinimumSize(980, 880)
+        container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+        layout.setSpacing(12)
 
         # Layer Selector & Header
         top_bar = QHBoxLayout()
@@ -1059,6 +1070,7 @@ class MainWindow(QMainWindow):
         top_bar.addStretch()
 
         btn_clear_layer = QPushButton("🗑️ Wyczyść mapowania tej warstwy")
+        btn_clear_layer.setStyleSheet("min-height: 24px; padding: 6px 12px;")
         btn_clear_layer.clicked.connect(self.clear_current_layer_remaps)
         top_bar.addWidget(btn_clear_layer)
         layout.addLayout(top_bar)
@@ -1076,7 +1088,6 @@ class MainWindow(QMainWindow):
         layout.addLayout(remap_header)
 
         self.remap_chassis = GK104ChassisWidget()
-        self.remap_chassis.setMinimumSize(960, 260)
         self.remap_grid_layout = self.remap_chassis.plate_layout
 
         self.build_keyboard_grid(
@@ -1092,7 +1103,7 @@ class MainWindow(QMainWindow):
         # Rotary Knobs Section (GK104 Pro Modular Knobs)
         knobs_card = QFrame()
         knobs_card.setObjectName("cardFrame")
-        knobs_card.setMinimumSize(960, 180)
+        knobs_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         knobs_vbox = QVBoxLayout(knobs_card)
         knobs_vbox.setContentsMargins(10, 10, 10, 10)
         knobs_vbox.setSpacing(8)
@@ -1104,7 +1115,7 @@ class MainWindow(QMainWindow):
         knobs_header.addStretch()
 
         btn_copy_knobs = QPushButton("📋 Skopiuj te pokrętła na wszystkie warstwy (Base, Layer 1-3)")
-        btn_copy_knobs.setStyleSheet("background-color: #2b3b55; color: #7aa2f7; font-weight: bold; padding: 4px 10px;")
+        btn_copy_knobs.setStyleSheet("background-color: #2b3b55; color: #7aa2f7; font-weight: bold; padding: 6px 12px; min-height: 24px;")
         btn_copy_knobs.clicked.connect(self.copy_knobs_to_all_layers)
         knobs_header.addWidget(btn_copy_knobs)
         knobs_vbox.addLayout(knobs_header)
@@ -1115,10 +1126,10 @@ class MainWindow(QMainWindow):
         for idx, knob_info in enumerate(KNOBS_METADATA):
             k_card = QFrame()
             k_card.setObjectName("knobCard")
-            k_card.setMinimumSize(290, 105)
+            k_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
             k_card_vbox = QVBoxLayout(k_card)
             k_card_vbox.setContentsMargins(8, 8, 8, 8)
-            k_card_vbox.setSpacing(4)
+            k_card_vbox.setSpacing(5)
 
             # Top of card: Title & Preset selector
             k_title_row = QHBoxLayout()
@@ -1134,7 +1145,8 @@ class MainWindow(QMainWindow):
             preset_combo.currentIndexChanged.connect(
                 lambda _, kid=knob_info["id"], cb=preset_combo: self.on_knob_preset_applied(kid, cb)
             )
-            preset_combo.setFixedWidth(145)
+            preset_combo.setMinimumWidth(135)
+            preset_combo.setFixedHeight(26)
             k_title_row.addWidget(preset_combo)
             k_card_vbox.addLayout(k_title_row)
 
@@ -1145,6 +1157,8 @@ class MainWindow(QMainWindow):
                 btn_act = QPushButton(f"{act_label}: Domyślny")
                 btn_act.setProperty("class", "knobActionButton")
                 btn_act.setCursor(Qt.PointingHandCursor)
+                btn_act.setMinimumHeight(28)
+                btn_act.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 btn_act.clicked.connect(lambda _, aid=act_id: self.on_remap_key_selected(aid))
                 k_card_vbox.addWidget(btn_act)
                 self.knob_action_buttons[act_id] = btn_act
@@ -1160,7 +1174,7 @@ class MainWindow(QMainWindow):
         # Action Assigner Frame
         assign_card = QFrame()
         assign_card.setObjectName("cardFrame")
-        assign_card.setMinimumSize(460, 340)
+        assign_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         assign_vbox = QVBoxLayout(assign_card)
         assign_vbox.setContentsMargins(10, 10, 10, 10)
         assign_vbox.setSpacing(6)
@@ -1204,6 +1218,8 @@ class MainWindow(QMainWindow):
 
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             scroll.setStyleSheet("background: transparent; border: none;")
 
             grid_widget = QWidget()
@@ -1226,11 +1242,12 @@ class MainWindow(QMainWindow):
                         background-color: #24293e;
                         border: 1px solid #3b4261;
                         border-radius: 6px;
-                        padding: 6px 6px;
+                        padding: 4px 6px;
                         font-size: 11px;
                         font-weight: bold;
-                        text-align: left;
+                        text-align: center;
                         color: #c0caf5;
+                        min-height: 28px;
                     }
                     QPushButton:hover {
                         background-color: #2f3652;
@@ -1239,6 +1256,8 @@ class MainWindow(QMainWindow):
                     }
                 """)
                 btn_act.setCursor(Qt.PointingHandCursor)
+                btn_act.setMinimumHeight(28)
+                btn_act.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 btn_act.clicked.connect(lambda _, code=action_code, lbl=action_label, b=btn_act: self.on_category_action_clicked(code, lbl, b))
                 btn_act.setToolTip(f"Kliknij, aby wybrać. Kod: {action_code}")
                 grid_layout.addWidget(btn_act, idx // cols, idx % cols)
@@ -1324,7 +1343,7 @@ class MainWindow(QMainWindow):
         # Right: Remap Table
         table_card = QFrame()
         table_card.setObjectName("cardFrame")
-        table_card.setMinimumSize(460, 340)
+        table_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         table_vbox = QVBoxLayout(table_card)
         table_vbox.setContentsMargins(8, 8, 8, 8)
 
@@ -1352,9 +1371,11 @@ class MainWindow(QMainWindow):
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         container = QWidget()
-        container.setMinimumSize(960, 640)
+        container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
@@ -1364,7 +1385,7 @@ class MainWindow(QMainWindow):
         # Left: Macro List
         left_card = QFrame()
         left_card.setObjectName("cardFrame")
-        left_card.setMinimumSize(280, 480)
+        left_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         left_vbox = QVBoxLayout(left_card)
         left_vbox.setContentsMargins(8, 8, 8, 8)
 
@@ -1374,7 +1395,7 @@ class MainWindow(QMainWindow):
         left_vbox.addWidget(self.macro_list_widget)
 
         macro_btn_row = QHBoxLayout()
-        btn_new_macro = QPushButton("➕ Nowe makro")
+        btn_new_macro = QPushButton("➕ Nowe")
         btn_new_macro.clicked.connect(self.create_new_macro)
         macro_btn_row.addWidget(btn_new_macro)
 
@@ -1393,7 +1414,7 @@ class MainWindow(QMainWindow):
         # Right: Macro Editor
         right_card = QFrame()
         right_card.setObjectName("cardFrame")
-        right_card.setMinimumSize(620, 480)
+        right_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         right_vbox = QVBoxLayout(right_card)
         right_vbox.setContentsMargins(10, 10, 10, 10)
         right_vbox.setSpacing(8)
@@ -1495,15 +1516,18 @@ class MainWindow(QMainWindow):
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         container = QWidget()
-        container.setMinimumSize(960, 580)
+        container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
         card = QFrame()
         card.setObjectName("cardFrame")
+        card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         card_vbox = QVBoxLayout(card)
         card_vbox.setContentsMargins(10, 10, 10, 10)
         card_vbox.setSpacing(8)
@@ -1862,6 +1886,7 @@ class MainWindow(QMainWindow):
                     if assigned:
                         friendly_act = get_friendly_action_label(assigned)
                         btn.setText(f"{act['label']}: {friendly_act}")
+                        btn.setToolTip(f"{knob_info['name']} — {act.get('full_label', act['label'])}\nPrzypisana akcja: {friendly_act}")
                         btn.setStyleSheet("""
                             background-color: #1f3554;
                             border: 2px solid #7aa2f7;
@@ -1875,6 +1900,7 @@ class MainWindow(QMainWindow):
                         """)
                     else:
                         btn.setText(f"{act['label']}: [Domyślnie]")
+                        btn.setToolTip(f"{knob_info['name']} — {act.get('full_label', act['label'])}\nDomyślna akcja: {act.get('default', 'Brak')}")
                         btn.setStyleSheet("""
                             background-color: #24293e;
                             border: 1px solid #3b4261;

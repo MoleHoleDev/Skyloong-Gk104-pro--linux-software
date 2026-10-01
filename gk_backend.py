@@ -175,12 +175,12 @@ HARDWARE_KEY_ALIASES = {
 KNOBS_METADATA = [
     {
         "id": "Knob1",
-        "name": "Pokrętło 1 (Pozycja Esc / Główne)",
+        "name": "Pokrętło 1 (Esc / Główne)",
         "icon": "🎛️",
         "actions": [
-            {"id": "Knob1_CW", "label": "Obrót w prawo (↻)", "default": "VolumeUp"},
-            {"id": "Knob1_CCW", "label": "Obrót w lewo (↺)", "default": "VolumeDown"},
-            {"id": "Knob1_Click", "label": "Wciśnięcie (Przycisk ⊙)", "default": "VolumeMute"}
+            {"id": "Knob1_CW", "label": "↻ Prawo", "full_label": "Obrót w prawo (CW)", "default": "VolumeUp"},
+            {"id": "Knob1_CCW", "label": "↺ Lewo", "full_label": "Obrót w lewo (CCW)", "default": "VolumeDown"},
+            {"id": "Knob1_Click", "label": "⊙ Klik", "full_label": "Wciśnięcie (Click)", "default": "VolumeMute"}
         ]
     },
     {
@@ -188,9 +188,9 @@ KNOBS_METADATA = [
         "name": "Pokrętło 2 (Pozycja F11)",
         "icon": "🔊",
         "actions": [
-            {"id": "Knob2_CW", "label": "Obrót w prawo (↻)", "default": "MediaNext"},
-            {"id": "Knob2_CCW", "label": "Obrót w lewo (↺)", "default": "MediaPrevious"},
-            {"id": "Knob2_Click", "label": "Wciśnięcie (Przycisk ⊙)", "default": "MediaPlayPause"}
+            {"id": "Knob2_CW", "label": "↻ Prawo", "full_label": "Obrót w prawo (CW)", "default": "MediaNext"},
+            {"id": "Knob2_CCW", "label": "↺ Lewo", "full_label": "Obrót w lewo (CCW)", "default": "MediaPrevious"},
+            {"id": "Knob2_Click", "label": "⊙ Klik", "full_label": "Wciśnięcie (Click)", "default": "MediaPlayPause"}
         ]
     },
     {
@@ -198,9 +198,9 @@ KNOBS_METADATA = [
         "name": "Pokrętło 3 (Pozycja F12)",
         "icon": "🎵",
         "actions": [
-            {"id": "Knob3_CW", "label": "Obrót w prawo (↻)", "default": "BrowserForward"},
-            {"id": "Knob3_CCW", "label": "Obrót w lewo (↺)", "default": "BrowserBack"},
-            {"id": "Knob3_Click", "label": "Wciśnięcie (Przycisk ⊙)", "default": "BrowserRefresh"}
+            {"id": "Knob3_CW", "label": "↻ Prawo", "full_label": "Obrót w prawo (CW)", "default": "BrowserForward"},
+            {"id": "Knob3_CCW", "label": "↺ Lewo", "full_label": "Obrót w lewo (CCW)", "default": "BrowserBack"},
+            {"id": "Knob3_Click", "label": "⊙ Klik", "full_label": "Wciśnięcie (Click)", "default": "BrowserRefresh"}
         ]
     },
     {
@@ -208,9 +208,9 @@ KNOBS_METADATA = [
         "name": "Pokrętło 4 (Pozycja PrtSc)",
         "icon": "🌐",
         "actions": [
-            {"id": "Knob4_CW", "label": "Obrót w prawo (↻)", "default": "VolumeUp"},
-            {"id": "Knob4_CCW", "label": "Obrót w lewo (↺)", "default": "VolumeDown"},
-            {"id": "Knob4_Click", "label": "Wciśnięcie (Przycisk ⊙)", "default": "VolumeMute"}
+            {"id": "Knob4_CW", "label": "↻ Prawo", "full_label": "Obrót w prawo (CW)", "default": "VolumeUp"},
+            {"id": "Knob4_CCW", "label": "↺ Lewo", "full_label": "Obrót w lewo (CCW)", "default": "VolumeDown"},
+            {"id": "Knob4_Click", "label": "⊙ Klik", "full_label": "Wciśnięcie (Click)", "default": "VolumeMute"}
         ]
     },
     {
@@ -218,9 +218,9 @@ KNOBS_METADATA = [
         "name": "Pokrętło 5 (Pozycja ScrLk)",
         "icon": "📜",
         "actions": [
-            {"id": "Knob5_CW", "label": "Obrót w prawo (↻)", "default": "VolumeUp"},
-            {"id": "Knob5_CCW", "label": "Obrót w lewo (↺)", "default": "VolumeDown"},
-            {"id": "Knob5_Click", "label": "Wciśnięcie (Przycisk ⊙)", "default": "VolumeMute"}
+            {"id": "Knob5_CW", "label": "↻ Prawo", "full_label": "Obrót w prawo (CW)", "default": "VolumeUp"},
+            {"id": "Knob5_CCW", "label": "↺ Lewo", "full_label": "Obrót w lewo (CCW)", "default": "VolumeDown"},
+            {"id": "Knob5_Click", "label": "⊙ Klik", "full_label": "Wciśnięcie (Click)", "default": "VolumeMute"}
         ]
     },
     {
@@ -228,9 +228,9 @@ KNOBS_METADATA = [
         "name": "Pokrętło 6 (Pozycja Pause)",
         "icon": "⚙️",
         "actions": [
-            {"id": "Knob6_CW", "label": "Obrót w prawo (↻)", "default": "OpenMediaPlayer"},
-            {"id": "Knob6_CCW", "label": "Obrót w lewo (↺)", "default": "VolumeDown"},
-            {"id": "Knob6_Click", "label": "Wciśnięcie (Przycisk ⊙)", "default": "VolumeMute"}
+            {"id": "Knob6_CW", "label": "↻ Prawo", "full_label": "Obrót w prawo (CW)", "default": "OpenMediaPlayer"},
+            {"id": "Knob6_CCW", "label": "↺ Lewo", "full_label": "Obrót w lewo (CCW)", "default": "VolumeDown"},
+            {"id": "Knob6_Click", "label": "⊙ Klik", "full_label": "Wciśnięcie (Click)", "default": "VolumeMute"}
         ]
     }
 ]

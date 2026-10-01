@@ -86,7 +86,8 @@ QPushButton {
     color: #c0caf5;
     border: 1px solid #414868;
     border-radius: 8px;
-    padding: 8px 16px;
+    padding: 6px 14px;
+    min-height: 24px;
     font-weight: bold;
 }
 
@@ -112,7 +113,8 @@ QPushButton#primaryBtn {
     color: #15161e;
     border: 1px solid #7aa2f7;
     font-size: 13px;
-    padding: 9px 18px;
+    padding: 8px 18px;
+    min-height: 26px;
     border-radius: 8px;
 }
 
@@ -130,6 +132,8 @@ QPushButton#dangerBtn {
     background-color: #f7768e;
     color: #15161e;
     border: 1px solid #f7768e;
+    padding: 6px 14px;
+    min-height: 24px;
     font-weight: bold;
 }
 
@@ -141,6 +145,8 @@ QPushButton#successBtn {
     background-color: #9ece6a;
     color: #15161e;
     border: 1px solid #9ece6a;
+    padding: 6px 14px;
+    min-height: 24px;
     font-weight: bold;
 }
 
@@ -322,12 +328,13 @@ QScrollBar:vertical {
     background: #16161e;
     width: 8px;
     border-radius: 4px;
+    margin: 0px;
 }
 
 QScrollBar::handle:vertical {
     background: #3b4261;
     border-radius: 4px;
-    min-height: 20px;
+    min-height: 25px;
 }
 
 QScrollBar::handle:vertical:hover {
@@ -336,26 +343,22 @@ QScrollBar::handle:vertical:hover {
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0px;
+    background: none;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
 }
 
 QScrollBar:horizontal {
+    height: 0px;
+    width: 0px;
     border: none;
-    background: #16161e;
-    height: 8px;
-    border-radius: 4px;
+    background: transparent;
 }
 
 QScrollBar::handle:horizontal {
-    background: #3b4261;
-    border-radius: 4px;
-    min-width: 20px;
-}
-
-QScrollBar::handle:horizontal:hover {
-    background: #7aa2f7;
-}
-
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    height: 0px;
     width: 0px;
 }
 
@@ -375,7 +378,8 @@ QPushButton.knobActionButton {
     background-color: #24293e;
     border: 1px solid #3b4261;
     border-radius: 6px;
-    padding: 6px 8px;
+    padding: 5px 8px;
+    min-height: 28px;
     font-size: 11px;
     text-align: left;
     color: #c0caf5;
