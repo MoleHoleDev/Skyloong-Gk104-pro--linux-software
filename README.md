@@ -223,6 +223,13 @@ All local application profiles, active states, and backups are stored in the use
 
 ---
 
+### 📄 License & Third-Party Credits
+* **Project License:** [MIT License](LICENSE)
+* **Third-Party Licenses:** Detailed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) (GK6X - MIT, HidSharp - Apache 2.0, PySide6 - LGPLv3).
+* Special thanks to the open-source community and the creators of `pixeltris/GK6X`.
+
+---
+
 <br><br>
 
 ========================================================================================
@@ -424,4 +431,6 @@ Wszystkie lokalne profile użytkownika, kopie zapasowe i logi przechowywane są 
 ---
 
 ### 📄 Licencja & Podziękowania
-Projekt udostępniony jest na licencji MIT. Podziękowania dla społeczności open-source oraz twórców narzędzia GK6X za udostępnienie niskopoziomowego protokołu komunikacji z kontrolerami klawiatur Semitek/Skyloong.
+* **Licencja projektu:** [MIT License](LICENSE)
+* **Licencje komponentów zewnętrznych:** Szczegółowe zestawienie znajduje się w pliku [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) (GK6X - MIT, HidSharp - Apache 2.0, PySide6 - LGPLv3).
+* Podziękowania dla społeczności open-source oraz twórców narzędzia `pixeltris/GK6X` za opracowanie protokołu komunikacji z kontrolerami klawiatur Semitek/Skyloong.
