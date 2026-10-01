@@ -3,7 +3,7 @@ import os
 import sys
 import time
 import shutil
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTabWidget, QListWidget, QListWidgetItem,
@@ -17,82 +17,17 @@ from PySide6.QtCore import Qt, QSize, Signal, QTimer, QObject
 from PySide6.QtGui import QColor, QFont, QIcon, QPixmap, QAction, QPainter, QLinearGradient, QBrush, QPen
 
 from system_checker import SystemChecker
-from gk_backend import (
-    GKBackend, KEY_DEFINITIONS, COLOR_PRESETS, AVAILABLE_LAYERS,
-    TARGET_KEY_CATEGORIES, POPULAR_SHORTCUTS, MacroItem, MacroAction,
-    KNOBS_METADATA, KNOB_PRESETS, HARDWARE_KEY_ALIASES,
-    get_system_battery_info
+import i18n
+from i18n import (
+    tr, get_current_language, set_current_language, get_available_languages,
+    get_knobs_metadata, get_knob_presets, get_target_key_categories,
+    get_popular_shortcuts, get_available_layers, get_action_short_labels,
+    get_friendly_action_label
 )
-
-# Friendly short names for visual keyboard display and tooltips
-ACTION_SHORT_LABELS = {
-    # Light / Backlight
-    "ToggleLighting": "💡LED OnOff",
-    "BrightnessUp": "☀️Jas+",
-    "BrightnessDown": "🌙Jas-",
-    "LightingSpeedIncrease": "⏩Szyb+",
-    "LightingSpeedDecrease": "⏪Szyb-",
-    "LightingPauseResume": "⏸️Pauza",
-    "NextLightingEffect": "🌈LED Efekt",
-    "NextReactiveLightingEffect": "✨LED Reakcja",
-    "Disabled": "🚫Wyłączony",
-    # Legacy hex support
-    "0x09060002": "💡LED OnOff",
-    "0x09020001": "☀️Jas+",
-    "0x09020002": "🌙Jas-",
-    "0x09030001": "⏩Szyb+",
-    "0x09030002": "⏪Szyb-",
-    "0x09060001": "⏸️Pauza",
-    "0x09010010": "🌈LED Efekt",
-    "0x09010011": "✨LED Reakcja",
-    "0x02000000": "🚫Wyłączony",
-    # Media
-    "VolumeUp": "🔊Vol+",
-    "VolumeDown": "🔉Vol-",
-    "VolumeMute": "🔇Mute",
-    "MediaPlayPause": "⏯️Play/Pause",
-    "MediaNext": "⏭️Next",
-    "MediaPrevious": "⏮️Prev",
-    "MediaStop": "⏹️Stop",
-    "OpenMediaPlayer": "🎵Player",
-    "Eject": "⏏️Eject",
-    # System / Net
-    "OpenCalculator": "🧮Kalk",
-    "OpenMyComputer": "💻Mój PC",
-    "OpenEmail": "✉️Email",
-    "BrowserHome": "🏠Home",
-    "BrowserBack": "⬅️Wstecz",
-    "BrowserForward": "➡️Dalej",
-    "BrowserRefresh": "🔄Odśw",
-    "BrowserFavorites": "⭐Ulub",
-    "BrowserSearch": "🔍Szukaj",
-    "Screenshot": "📸PrtSc",
-    # Mouse
-    "MouseLClick": "🖱️L-Klik",
-    "MouseRClick": "🖱️P-Klik",
-    "MouseMClick": "🖱️Ś-Klik",
-    "MouseBack": "◀️M-Wstecz",
-    "MouseAdvance": "▶️M-Dalej",
-    "LeftClick": "🖱️L-Klik",
-    "RightClick": "🖱️P-Klik",
-    "MiddleClick": "🖱️Ś-Klik",
-    "MouseForward": "▶️M-Dalej"
-}
-
-
-def get_friendly_action_label(action: str) -> str:
-    """Return a descriptive, readable label for any key or special action code."""
-    if not action:
-        return "Domyślna funkcja"
-    if action.startswith("Macro(") and action.endswith(")"):
-        return f"⚡ Makro: {action[6:-1]}"
-    for cat_name, keys in TARGET_KEY_CATEGORIES.items():
-        for kid, klabel in keys:
-            if kid == action:
-                return f"{klabel} [{kid}]"
-    if action in ACTION_SHORT_LABELS:
-        return ACTION_SHORT_LABELS[action]
-    return action
+from gk_backend import (
+    GKBackend, KEY_DEFINITIONS, COLOR_PRESETS, MacroItem, MacroAction,
+    HARDWARE_KEY_ALIASES, get_system_battery_info
+)
 
 
 class KeyVisualButton(QPushButton):
@@ -152,7 +87,8 @@ class KeyVisualButton(QPushButton):
             lines.append(self.label_text)
 
         if self.remap_action:
-            short_act = ACTION_SHORT_LABELS.get(self.remap_action, self.remap_action)
+            short_labels = get_action_short_labels()
+            short_act = short_labels.get(self.remap_action, self.remap_action)
             if short_act.startswith("Macro(") and short_act.endswith(")"):
                 short_act = "⚡" + short_act[6:-1]
             if len(short_act) > 9:
@@ -178,11 +114,12 @@ class KeyVisualButton(QPushButton):
                 bg = "#1f3554"
 
         # Tooltip
-        tip = f"Klawisz: {self.label_text} ({self.key_id})"
+        tip = f"{tr('remap_col_key', 'Key')}: {self.label_text} ({self.key_id})"
         if self.knob_id:
-            tip += f"\n🎛️ Gniazdo modułowego pokrętła: {self.knob_name}\n(Kliknij, aby skonfigurować obrót ↻/↺ i wciśnięcie)"
+            k_name = self.knob_name or self.knob_id
+            tip += f"\n🎛️ {k_name}\n({tr('remap_btn_assign', 'Click to configure knob')})"
         if self.remap_action:
-            tip += f"\nPrzypisana akcja: {get_friendly_action_label(self.remap_action)}"
+            tip += f"\n{tr('remap_col_action', 'Assigned Function')}: {get_friendly_action_label(self.remap_action)}"
         self.setToolTip(tip)
 
         self.setStyleSheet(f"""
@@ -203,139 +140,169 @@ class KeyVisualButton(QPushButton):
 
 class GK104ChassisWidget(QFrame):
     """Authentic chassis frame for GK104 Pro with screen mockup, status LEDs, and brushed casing."""
-    def __init__(self, title_text: str = "Wizualna Klawiatura 104", parent=None):
+    def __init__(self, title_text: Optional[str] = None, parent=None):
         super().__init__(parent)
         self.setObjectName("gk104Chassis")
         self.setFrameShape(QFrame.StyledPanel)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        self.layout_inner = QVBoxLayout(self)
-        self.layout_inner.setContentsMargins(12, 10, 12, 12)
-        self.layout_inner.setSpacing(6)
 
-        # Top chassis bar: Logo, Smart Screen, Indicators
-        top_bar = QHBoxLayout()
-        top_bar.setContentsMargins(4, 2, 4, 4)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(14, 12, 14, 14)
+        main_layout.setSpacing(8)
 
-        # Left / Logo
-        logo_box = QVBoxLayout()
-        logo_box.setSpacing(1)
-        lbl_brand = QLabel("⌨️ SKYLOONG")
-        lbl_brand.setStyleSheet("font-size: 13px; font-weight: 900; color: #c0caf5; letter-spacing: 2px;")
-        lbl_model = QLabel("GK104 PRO 8K • DUAL SMART SCREEN & 6-KNOB")
-        lbl_model.setStyleSheet("font-size: 9px; font-weight: bold; color: #7aa2f7; letter-spacing: 1px;")
-        logo_box.addWidget(lbl_brand)
-        logo_box.addWidget(lbl_model)
-        top_bar.addLayout(logo_box)
+        # Top Bar of Keyboard Case: Brand Badge, Smart Screen, and Status LEDs
+        case_top_bar = QHBoxLayout()
+        case_top_bar.setContentsMargins(4, 0, 4, 4)
 
-        top_bar.addStretch()
+        # Brand Badge
+        brand_box = QHBoxLayout()
+        brand_icon = QLabel("⌨️")
+        brand_icon.setStyleSheet("font-size: 14px;")
+        brand_box.addWidget(brand_icon)
 
-        # Status LEDs
-        leds_box = QHBoxLayout()
-        leds_box.setSpacing(6)
-        for led_tag, led_color in [
-            ("CAPS", "#9ece6a"), ("NUM", "#9ece6a"), ("WIN", "#7aa2f7"),
-            ("MAC", "#bb9af7"), ("2.4G", "#7dcfff"), ("BT", "#2ac3de"), ("USB", "#e0af68")
-        ]:
-            lbl_led = QLabel(f"● {led_tag}")
-            lbl_led.setStyleSheet(f"font-size: 9px; font-weight: bold; color: {led_color}; background-color: #161622; padding: 2px 6px; border-radius: 4px; border: 1px solid #24283b;")
-            leds_box.addWidget(lbl_led)
-        top_bar.addLayout(leds_box)
+        brand_lbl = QLabel("SKYLOONG • GK104 PRO")
+        brand_lbl.setStyleSheet("font-family: monospace; font-size: 12px; font-weight: bold; color: #ff9e3b; letter-spacing: 2px;")
+        brand_box.addWidget(brand_lbl)
 
-        top_bar.addSpacing(14)
+        badge_sub = QLabel("104RGB / HOT-SWAP / 6-KNOBS")
+        badge_sub.setStyleSheet("font-size: 9px; color: #565f89; font-weight: bold; margin-left: 6px; padding: 2px 4px; background-color: #16161e; border-radius: 3px;")
+        brand_box.addWidget(badge_sub)
+        case_top_bar.addLayout(brand_box)
 
-        # Smart OLED Screen simulation mockup
+        case_top_bar.addStretch()
+
+        # Center: Realistic 1.04-inch Smart Screen Mockup
         self.screen_frame = QFrame()
-        self.screen_frame.setObjectName("oledScreenMockup")
-        self.screen_frame.setFixedSize(180, 38)
-        screen_layout = QVBoxLayout(self.screen_frame)
-        screen_layout.setContentsMargins(4, 2, 4, 2)
-        screen_layout.setSpacing(0)
-
-        self.lbl_screen_line1 = QLabel("1.04″ SMART SCREEN")
-        self.lbl_screen_line1.setStyleSheet("font-size: 8px; font-weight: bold; color: #7dcfff; font-family: monospace;")
-        self.lbl_screen_line2 = QLabel("PROFILE: LAYER 1 • ⚡ 100%")
-        self.lbl_screen_line2.setStyleSheet("font-size: 9px; font-weight: 900; color: #00f0ff; font-family: monospace;")
-
-        screen_layout.addWidget(self.lbl_screen_line1, alignment=Qt.AlignCenter)
-        screen_layout.addWidget(self.lbl_screen_line2, alignment=Qt.AlignCenter)
-        top_bar.addWidget(self.screen_frame)
-
-        self.layout_inner.addLayout(top_bar)
-
-        # Switch Plate Container (sunken dark grid container for keys)
-        self.plate_frame = QFrame()
-        self.plate_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        self.plate_frame.setStyleSheet("""
-            QFrame {
-                background-color: #0b0c12;
-                border: 2px solid #1c1d2b;
-                border-radius: 8px;
-                padding: 4px;
+        self.screen_frame.setObjectName("smartScreenMockup")
+        self.screen_frame.setFixedSize(190, 42)
+        self.screen_frame.setStyleSheet("""
+            QFrame#smartScreenMockup {
+                background-color: #050608;
+                border: 2px solid #ff9e3b;
+                border-radius: 6px;
+                padding: 2px;
             }
         """)
-        self.plate_layout = QGridLayout(self.plate_frame)
-        self.plate_layout.setSpacing(3)
-        self.plate_layout.setContentsMargins(3, 3, 3, 3)
-        self.layout_inner.addWidget(self.plate_frame)
+        screen_layout = QVBoxLayout(self.screen_frame)
+        screen_layout.setContentsMargins(6, 2, 6, 2)
+        screen_layout.setSpacing(0)
 
-    def update_screen_info(self, line1: str, line2: str):
-        self.lbl_screen_line1.setText(line1)
-        self.lbl_screen_line2.setText(line2)
+        self.screen_txt_title = QLabel(tr("smart_screen_title", "1.04″ SMART SCREEN"))
+        self.screen_txt_title.setStyleSheet("color: #7dcfff; font-family: monospace; font-size: 9px; font-weight: bold;")
+        self.screen_txt_title.setAlignment(Qt.AlignCenter)
+        screen_layout.addWidget(self.screen_txt_title)
+
+        self.screen_txt_info = QLabel("RAINBOW WAVE • 100%")
+        self.screen_txt_info.setStyleSheet("color: #ff9eaf; font-family: monospace; font-size: 10px; font-weight: bold;")
+        self.screen_txt_info.setAlignment(Qt.AlignCenter)
+        screen_layout.addWidget(self.screen_txt_info)
+
+        case_top_bar.addWidget(self.screen_frame)
+
+        case_top_bar.addStretch()
+
+        # Right: Keyboard Lock Indicators (Num, Caps, Scroll, Win Lock)
+        leds_box = QHBoxLayout()
+        leds_box.setSpacing(6)
+        self.led_num = QLabel("NUM")
+        self.led_caps = QLabel("CAPS")
+        self.led_scroll = QLabel("SCRL")
+        self.led_win = QLabel("WIN")
+
+        for led in [self.led_num, self.led_caps, self.led_scroll, self.led_win]:
+            led.setStyleSheet("""
+                QLabel {
+                    background-color: #1a1b26;
+                    color: #7aa2f7;
+                    border: 1px solid #3b4261;
+                    border-radius: 4px;
+                    font-size: 8px;
+                    font-weight: bold;
+                    padding: 2px 6px;
+                }
+            """)
+            leds_box.addWidget(led)
+        case_top_bar.addLayout(leds_box)
+
+        main_layout.addLayout(case_top_bar)
+
+        # Sunken Key Switch Plate Container
+        self.switch_plate = QFrame()
+        self.switch_plate.setObjectName("switchPlate")
+        self.switch_plate.setStyleSheet("""
+            QFrame#switchPlate {
+                background-color: #13141c;
+                border: 2px solid #24283b;
+                border-radius: 8px;
+                padding: 6px;
+            }
+        """)
+        self.plate_layout = QGridLayout(self.switch_plate)
+        self.plate_layout.setSpacing(4)
+        self.plate_layout.setContentsMargins(4, 4, 4, 4)
+
+        main_layout.addWidget(self.switch_plate)
+
+        self.setStyleSheet("""
+            QFrame#gk104Chassis {
+                background-color: #1c1e2d;
+                border: 2px solid #32374e;
+                border-radius: 12px;
+            }
+        """)
+
+    def update_screen_info(self, title: str, subtitle: str):
+        self.screen_txt_title.setText(title)
+        self.screen_txt_info.setText(subtitle)
 
 
 class LiveRGBAnimationController(QObject):
-    """Engine for smooth real-time on-screen preview of animated RGB effects."""
+    """Timer-driven ~30 FPS animation controller for realistic real-time keyboard lighting simulation."""
     def __init__(self, buttons_dict: Dict[str, KeyVisualButton], parent=None):
         super().__init__(parent)
         self.buttons = buttons_dict
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self._on_tick)
-        self.speed = 1.0
-        self.tick = 0.0
-        self.current_mode = "preset"  # "preset", "static", "off"
+        self.timer.timeout.connect(self._render_frame)
         self.preset_name = "Spectral Cycle"
-        self.static_colors: Dict[str, str] = {}
         self.brightness = 100
-        self.is_running = True
+        self.speed = 1.0
+        self.frame_count = 0
+        self.is_running = False
+        self.current_mode = "preset"
+        self.static_colors: Dict[str, str] = {}
 
     def start(self):
         self.is_running = True
-        if not self.timer.isActive():
-            self.timer.start(33)  # ~30 FPS
+        self.timer.start(33)  # ~30 FPS
 
     def stop(self):
         self.is_running = False
         self.timer.stop()
 
-    def set_speed(self, speed: float):
-        self.speed = max(0.1, min(5.0, speed))
-
-    def set_brightness(self, brightness: int):
-        self.brightness = max(0, min(100, brightness))
-
     def set_preset(self, preset_name: str):
-        self.current_mode = "preset"
         self.preset_name = preset_name
+        self.current_mode = "preset"
 
-    def set_static(self, colors: Dict[str, str]):
+    def set_brightness(self, value: int):
+        self.brightness = max(0, min(100, value))
+
+    def set_speed(self, speed_factor: float):
+        self.speed = max(0.1, min(5.0, speed_factor))
+
+    def set_static_mode(self, colors: Dict[str, str]):
+        self.static_colors = dict(colors)
         self.current_mode = "static"
-        self.static_colors = colors.copy()
 
-    def set_off(self):
-        self.current_mode = "off"
-
-    def _on_tick(self):
-        if not self.is_running or not self.buttons:
+    def _render_frame(self):
+        if not self.buttons or self.brightness == 0:
+            if self.brightness == 0:
+                for btn in self.buttons.values():
+                    btn.set_color("#14151f")
             return
 
-        self.tick += 0.033 * self.speed
-        t = self.tick
+        self.frame_count += 1
+        t = (self.frame_count * 0.04) * self.speed
         factor = self.brightness / 100.0
-
-        if self.current_mode == "off" or self.brightness <= 0:
-            for btn in self.buttons.values():
-                btn.set_color("#181924")
-            return
 
         if self.current_mode == "static":
             for kid, btn in self.buttons.items():
@@ -419,7 +386,7 @@ class ComponentInstallerDialog(QDialog):
     """Interactive assistant for checking and installing Mono, udev rules and USB permissions."""
     def __init__(self, parent=None, auto_prompt_install=False):
         super().__init__(parent)
-        self.setWindowTitle("⚙️ Konfiguracja Komponentów & Uprawnień — Skyloong GK104 Pro")
+        self.setWindowTitle(tr("diag_title", "⚙️ System Diagnostics & Requirements Wizard"))
         self.resize(680, 520)
         self.auto_prompt_install = auto_prompt_install
         self.init_ui()
@@ -432,9 +399,9 @@ class ComponentInstallerDialog(QDialog):
 
         # Header title
         title_box = QVBoxLayout()
-        header = QLabel("Diagnostyka Wymagań i Uprawnień Systemowych")
+        header = QLabel(tr("diag_header", "Linux Environment & Hardware Access Verification"))
         header.setStyleSheet("font-size: 16px; font-weight: bold; color: #7aa2f7;")
-        sub = QLabel("Aplikacja wymaga środowiska Mono oraz reguł Udev do bezpośredniej komunikacji z klawiaturą przez USB/hidraw.")
+        sub = QLabel(tr("diag_mono_desc", "Required by GK6X low-level communication driver to access hardware without root permissions."))
         sub.setStyleSheet("color: #a9b1d6; font-size: 12px;")
         sub.setWordWrap(True)
         title_box.addWidget(header)
@@ -442,261 +409,203 @@ class ComponentInstallerDialog(QDialog):
         layout.addLayout(title_box)
 
         # Diagnostic items group
-        self.status_group = QGroupBox("Stan komponentów systemowych")
+        self.status_group = QGroupBox(tr("diag_title", "Components Status"))
         status_layout = QVBoxLayout(self.status_group)
         status_layout.setSpacing(10)
 
         # Mono status
-        self.lbl_mono_status = QLabel("Środowisko Mono Runtime: Sprawdzanie...")
+        self.lbl_mono_status = QLabel(f"{tr('diag_mono_title')}: Checking...")
         self.lbl_mono_status.setStyleSheet("font-size: 13px;")
         status_layout.addWidget(self.lbl_mono_status)
 
         # Udev rules status
-        self.lbl_udev_status = QLabel("Reguły Udev (/etc/udev/rules.d/99-skyloong.rules): Sprawdzanie...")
+        self.lbl_udev_status = QLabel(f"{tr('diag_udev_title')}: Checking...")
         self.lbl_udev_status.setStyleSheet("font-size: 13px;")
         status_layout.addWidget(self.lbl_udev_status)
 
         # Hidraw permission status
-        self.lbl_perm_status = QLabel("Dostęp do urządzeń /dev/hidraw: Sprawdzanie...")
+        self.lbl_perm_status = QLabel(f"{tr('diag_usb_title')}: Checking...")
         self.lbl_perm_status.setStyleSheet("font-size: 13px;")
         status_layout.addWidget(self.lbl_perm_status)
 
-        # GK6X engine status
-        self.lbl_gk6x_status = QLabel("Silnik GK6X & Efekty LED: Sprawdzanie...")
-        self.lbl_gk6x_status.setStyleSheet("font-size: 13px;")
-        status_layout.addWidget(self.lbl_gk6x_status)
-
         layout.addWidget(self.status_group)
 
-        # Log & Instruction box
-        self.txt_details = QTextEdit()
-        self.txt_details.setReadOnly(True)
-        self.txt_details.setStyleSheet("background-color: #13141c; color: #c0caf5; font-family: monospace; font-size: 11px; border: 1px solid #24283b; border-radius: 6px;")
-        self.txt_details.setFixedHeight(120)
-        layout.addWidget(self.txt_details)
+        # Auto install / script preview box
+        self.script_group = QGroupBox("Automated Setup & Fix")
+        script_layout = QVBoxLayout(self.script_group)
 
-        # Progress bar
-        self.install_progress = QProgressBar()
-        self.install_progress.setRange(0, 0)
-        self.install_progress.setVisible(False)
-        layout.addWidget(self.install_progress)
+        self.lbl_action_hint = QLabel("Click the button below to automatically install missing packages and configure udev rules:")
+        self.lbl_action_hint.setStyleSheet("color: #ff9eaf; font-size: 12px; font-weight: bold;")
+        script_layout.addWidget(self.lbl_action_hint)
 
-        # Action Buttons
-        btn_box = QHBoxLayout()
-        self.btn_install = QPushButton("🚀 Zainstaluj i napraw automatycznie")
-        self.btn_install.setStyleSheet("background-color: #7aa2f7; color: #15161e; font-weight: bold; padding: 8px 16px; border-radius: 6px;")
-        self.btn_install.clicked.connect(self.on_install_clicked)
-        btn_box.addWidget(self.btn_install)
+        self.btn_auto_install = QPushButton(tr("diag_btn_autofix", "⚡ Run Automatic Setup (sudo ./install_rules.sh)"))
+        self.btn_auto_install.setObjectName("primaryBtn")
+        self.btn_auto_install.setStyleSheet("padding: 10px; font-size: 13px; font-weight: bold;")
+        self.btn_auto_install.clicked.connect(self.on_run_auto_install)
+        script_layout.addWidget(self.btn_auto_install)
 
-        self.btn_refresh = QPushButton("🔄 Sprawdź ponownie")
-        self.btn_refresh.clicked.connect(self.refresh_diagnostics)
-        btn_box.addWidget(self.btn_refresh)
+        layout.addWidget(self.script_group)
 
-        btn_box.addStretch()
+        # Bottom buttons
+        bottom_row = QHBoxLayout()
+        self.btn_recheck = QPushButton(tr("diag_btn_recheck", "🔄 Re-check"))
+        self.btn_recheck.clicked.connect(self.refresh_diagnostics)
+        bottom_row.addWidget(self.btn_recheck)
 
-        self.btn_close = QPushButton("Zamknij")
+        bottom_row.addStretch()
+
+        self.btn_close = QPushButton(tr("diag_btn_close", "Close"))
         self.btn_close.clicked.connect(self.accept)
-        btn_box.addWidget(self.btn_close)
+        bottom_row.addWidget(self.btn_close)
 
-        layout.addLayout(btn_box)
+        layout.addLayout(bottom_row)
 
     def refresh_diagnostics(self):
         diag = SystemChecker.get_full_diagnostics()
-        
+
         # Mono
-        if diag["mono"]["installed"]:
-            self.lbl_mono_status.setText(f"🟢 Środowisko Mono Runtime: Zainstalowane ({diag['mono']['version']})")
+        mono = diag["mono"]
+        if mono["installed"]:
+            self.lbl_mono_status.setText(f"✅ {tr('diag_mono_title')}: {mono['version']} ({mono['path']})")
             self.lbl_mono_status.setStyleSheet("color: #9ece6a; font-weight: bold; font-size: 13px;")
         else:
-            self.lbl_mono_status.setText("🔴 Środowisko Mono Runtime: BRAK (Wymagane do wgrywania konfiguracji przez GK6X)")
+            self.lbl_mono_status.setText(f"❌ {tr('diag_mono_title')}: {tr('diag_status_fail')}")
             self.lbl_mono_status.setStyleSheet("color: #f7768e; font-weight: bold; font-size: 13px;")
 
         # Udev
-        if diag["udev"]["installed"]:
-            self.lbl_udev_status.setText(f"🟢 Reguły Udev: Skonfigurowane ({diag['udev']['path']})")
+        udev = diag["udev"]
+        if udev["installed"]:
+            self.lbl_udev_status.setText(f"✅ {tr('diag_udev_title')}: {tr('diag_status_ok')} ({udev['path']})")
             self.lbl_udev_status.setStyleSheet("color: #9ece6a; font-weight: bold; font-size: 13px;")
         else:
-            self.lbl_udev_status.setText("🔴 Reguły Udev: BRAK (/etc/udev/rules.d/99-skyloong.rules nie istnieje)")
+            self.lbl_udev_status.setText(f"❌ {tr('diag_udev_title')}: {tr('diag_status_fail')}")
             self.lbl_udev_status.setStyleSheet("color: #f7768e; font-weight: bold; font-size: 13px;")
 
-        # Hidraw permissions
-        if diag["permissions"]["has_access"]:
-            self.lbl_perm_status.setText("🟢 Uprawnienia USB / hidraw: Pełny dostęp dla użytkownika (RW)")
+        # Permissions
+        perms = diag["permissions"]
+        if perms["has_access"]:
+            nodes_str = ", ".join(perms["accessible_nodes"]) if perms["accessible_nodes"] else "hidraw OK"
+            self.lbl_perm_status.setText(f"✅ {tr('diag_usb_title')}: {tr('diag_status_ok')} ({nodes_str})")
             self.lbl_perm_status.setStyleSheet("color: #9ece6a; font-weight: bold; font-size: 13px;")
         else:
-            nodes_str = ", ".join(diag["permissions"]["found_nodes"]) if diag["permissions"]["found_nodes"] else "węzły hidraw"
-            self.lbl_perm_status.setText(f"🟡 Uprawnienia USB / hidraw: Brak uprawnień do {nodes_str}")
+            self.lbl_perm_status.setText(f"⚠️ {tr('diag_usb_title')}: {tr('diag_status_fail')}")
             self.lbl_perm_status.setStyleSheet("color: #e0af68; font-weight: bold; font-size: 13px;")
 
-        # GK6X engine
-        from gk_backend import APP_DIR, EXE_PATH, LIGHTING_DIR
-        has_exe = os.path.exists(EXE_PATH)
-        effects_count = len(os.listdir(LIGHTING_DIR)) if os.path.exists(LIGHTING_DIR) else 0
-        if has_exe and effects_count > 0:
-            self.lbl_gk6x_status.setText(f"🟢 Silnik GK6X: Gotowy ({effects_count} efektów oświetlenia .le)")
-            self.lbl_gk6x_status.setStyleSheet("color: #9ece6a; font-weight: bold; font-size: 13px;")
-        else:
-            self.lbl_gk6x_status.setText("🔴 Silnik GK6X: Brak bazy efektów lub GK6X.exe")
-            self.lbl_gk6x_status.setStyleSheet("color: #f7768e; font-weight: bold; font-size: 13px;")
-
-        # Details
-        pkg_mgr, mono_cmd = SystemChecker.detect_package_manager()
-        msg = []
         if diag["all_ok"]:
-            msg.append("✅ Wszystkie wymagane komponenty są zainstalowane i prawidłowo skonfigurowane!")
-            msg.append("Klawiatura Skyloong GK104 Pro jest gotowa do pełnej obsługi.")
-            self.btn_install.setText("✅ Wszystko skonfigurowane")
-            self.btn_install.setEnabled(False)
+            self.lbl_action_hint.setText("✅ System environment is fully configured! Hardware bridge is ready.")
+            self.lbl_action_hint.setStyleSheet("color: #9ece6a; font-weight: bold;")
+            self.btn_auto_install.setEnabled(False)
         else:
-            msg.append("⚠️ Wykryto brakujące komponenty lub brak uprawnień Udev:")
-            for item in diag["missing_items"]:
-                msg.append(f"  • {item}")
-            msg.append("")
-            msg.append(f"Wykryty menedżer pakietów: {pkg_mgr or 'Brak'}")
-            if mono_cmd:
-                msg.append(f"Polecenie instalacji Mono: sudo {mono_cmd}")
-            msg.append("Możesz kliknąć 'Zainstaluj i napraw automatycznie' (wymagane hasło administratora)")
-            msg.append("lub uruchomić w terminalu: sudo ./install_rules.sh")
-            self.btn_install.setText("🚀 Zainstaluj i napraw automatycznie")
-            self.btn_install.setEnabled(True)
+            self.lbl_action_hint.setText(f"⚠️ Missing components: {', '.join(diag['missing_items'])}")
+            self.lbl_action_hint.setStyleSheet("color: #f7768e; font-weight: bold;")
+            self.btn_auto_install.setEnabled(True)
 
-        self.txt_details.setPlainText("\n".join(msg))
-
-    def on_install_clicked(self):
-        reply = QMessageBox.question(
-            self,
-            "Potwierdzenie instalacji",
-            "Aplikacja zainstaluje wymagany pakiet Mono oraz doda reguły Udev do /etc/udev/rules.d/99-skyloong.rules.\n\n"
-            "Czy chcesz kontynuować? (Zostaniesz poproszony o hasło administratora w oknie autoryzacji)",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes
-        )
-        if reply != QMessageBox.Yes:
-            return
-
-        self.install_progress.setVisible(True)
-        self.btn_install.setEnabled(False)
-        self.txt_details.append("\n-> Uruchamianie instalatora z uprawnieniami administratora...")
+    def on_run_auto_install(self):
+        self.btn_auto_install.setEnabled(False)
+        self.btn_auto_install.setText("Running setup script...")
         QApplication.processEvents()
 
         ok, msg = SystemChecker.run_installation()
-        self.install_progress.setVisible(False)
-        self.btn_install.setEnabled(True)
+        self.refresh_diagnostics()
+        self.btn_auto_install.setText(tr("diag_btn_autofix", "⚡ Run Automatic Setup (sudo ./install_rules.sh)"))
 
         if ok:
-            QMessageBox.information(self, "Instalacja zakończona", msg)
-            self.refresh_diagnostics()
-            if self.parent() and hasattr(self.parent(), "refresh_device"):
-                self.parent().refresh_device()
+            QMessageBox.information(self, tr("msg_success", "Success"), msg)
         else:
-            QMessageBox.warning(self, "Błąd instalacji", f"{msg}\n\nMożesz także uruchomić ręcznie w terminalu:\nsudo ./install_rules.sh")
-            self.refresh_diagnostics()
+            QMessageBox.warning(self, tr("msg_error", "Error"), msg)
 
 
 class ProfileManagerDialog(QDialog):
-    """Interactive manager for saved keyboard configurations, JSON profiles and GK6X UserData files."""
+    """Dialog for managing user configuration profiles, importing, exporting, and flashing."""
     def __init__(self, backend: GKBackend, main_window=None, parent=None):
         super().__init__(parent or main_window)
         self.backend = backend
         self.main_window = main_window
-        self.setWindowTitle("📁 Menedżer Profili i Zapisów Konfiguracji — Skyloong GK104 Pro")
-        self.resize(780, 520)
-        self.setMinimumSize(660, 420)
+        self.setWindowTitle(tr("pm_title", "📁 Profile & Backup Manager"))
+        self.resize(760, 500)
         self.profiles_data: List[Dict[str, Any]] = []
         self.init_ui()
         self.refresh_profiles_list()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(10)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
 
-        # Header Info Card
-        header_card = QFrame()
-        header_card.setObjectName("cardFrame")
-        h_box = QVBoxLayout(header_card)
-        h_box.setContentsMargins(12, 10, 12, 10)
-        h_box.setSpacing(4)
-
-        lbl_title = QLabel("💾 Zarządzanie Zapisami Ustawień & Profilami Klawiatury")
-        lbl_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #7aa2f7;")
-        h_box.addWidget(lbl_title)
-
-        lbl_desc = QLabel(
-            "Zarządzaj swoimi konfiguracjami remapowania klawiszy, pokręteł, makr i oświetlenia LED. "
-            "Możesz zapisywać nowe profile, importować pliki z dysku (.json / .txt) oraz bezpośrednio programować klawiaturę."
-        )
-        lbl_desc.setWordWrap(True)
-        lbl_desc.setStyleSheet("color: #a9b1d6; font-size: 11px;")
-        h_box.addWidget(lbl_desc)
-        layout.addWidget(header_card)
-
-        # Top Action Buttons Row
-        actions_row = QHBoxLayout()
-        actions_row.setSpacing(8)
-
-        self.btn_save_current = QPushButton("💾 Zapisz bieżące ustawienia...")
-        self.btn_save_current.setObjectName("primaryBtn")
-        self.btn_save_current.setToolTip("Zapisz aktualną konfigurację z programu jako nowy profil")
-        self.btn_save_current.clicked.connect(self.on_save_current_clicked)
-        actions_row.addWidget(self.btn_save_current)
-
-        self.btn_import_file = QPushButton("📥 Importuj z dysku...")
-        self.btn_import_file.setToolTip("Wczytaj dowolny plik .json lub .txt z dysku do biblioteki profili")
-        self.btn_import_file.clicked.connect(self.on_import_file_clicked)
-        actions_row.addWidget(self.btn_import_file)
-
-        self.btn_export_file = QPushButton("📤 Eksportuj plik...")
-        self.btn_export_file.setToolTip("Zapisz wybrany profil w dowolnej lokalizacji na dysku")
-        self.btn_export_file.clicked.connect(self.on_export_file_clicked)
-        actions_row.addWidget(self.btn_export_file)
-
-        self.btn_refresh = QPushButton("🔄 Odśwież")
-        self.btn_refresh.setToolTip("Odśwież listę zapisanych profili")
-        self.btn_refresh.clicked.connect(self.refresh_profiles_list)
-        actions_row.addWidget(self.btn_refresh)
-
-        actions_row.addStretch()
-        layout.addLayout(actions_row)
+        # Top title & description
+        top_box = QVBoxLayout()
+        header = QLabel(tr("pm_title", "📁 Profile & Backup Manager"))
+        header.setStyleSheet("font-size: 16px; font-weight: bold; color: #7aa2f7;")
+        sub = QLabel("Manage your saved configurations, backups, and GK6X UserData files.")
+        sub.setStyleSheet("color: #a9b1d6; font-size: 12px;")
+        top_box.addWidget(header)
+        top_box.addWidget(sub)
+        layout.addLayout(top_box)
 
         # Profiles Table
         self.table = QTableWidget()
         self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Nazwa Konfiguracji", "Format", "Data modyfikacji", "Rozmiar"])
+        self.table.setHorizontalHeaderLabels([
+            tr("pm_col_name", "Profile Name"),
+            tr("pm_col_type", "Format"),
+            tr("pm_col_date", "Last Modified"),
+            tr("pm_col_size", "Size")
+        ])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.itemDoubleClicked.connect(self.on_table_double_clicked)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
+        self.table.itemDoubleClicked.connect(self.on_table_double_clicked)
         layout.addWidget(self.table)
 
-        # Info label for selected profile
-        self.lbl_selected_info = QLabel("Wybierz profil z tabeli powyżej (lub kliknij dwukrotnie), aby wczytać.")
-        self.lbl_selected_info.setStyleSheet("color: #7aa2f7; font-size: 11px; padding: 2px 4px;")
+        # Status / Selected item info
+        self.lbl_selected_info = QLabel(tr("pm_no_profiles", "No profiles saved yet."))
+        self.lbl_selected_info.setStyleSheet("color: #7dcfff; font-size: 11px;")
         layout.addWidget(self.lbl_selected_info)
 
-        # Bottom Action Bar
+        # Action Buttons row
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
+
+        self.btn_save_current = QPushButton(tr("pm_btn_save_current", "💾 Save Current Settings..."))
+        self.btn_save_current.setStyleSheet("padding: 6px 12px; font-weight: bold;")
+        self.btn_save_current.clicked.connect(self.on_save_current_clicked)
+        action_row.addWidget(self.btn_save_current)
+
+        self.btn_import_file = QPushButton(tr("pm_btn_import", "📂 Import File..."))
+        self.btn_import_file.clicked.connect(self.on_import_file_clicked)
+        action_row.addWidget(self.btn_import_file)
+
+        self.btn_export_file = QPushButton(tr("pm_btn_export", "📤 Export File..."))
+        self.btn_export_file.setEnabled(False)
+        self.btn_export_file.clicked.connect(self.on_export_file_clicked)
+        action_row.addWidget(self.btn_export_file)
+
+        action_row.addStretch()
+        layout.addLayout(action_row)
+
+        # Bottom Operation Bar
         bottom_row = QHBoxLayout()
         bottom_row.setSpacing(8)
 
-        self.btn_load_to_app = QPushButton("📂 Wczytaj do edytora")
+        self.btn_load_to_app = QPushButton(tr("pm_btn_load", "📥 Load to Editor"))
+        self.btn_load_to_app.setObjectName("primaryBtn")
         self.btn_load_to_app.setStyleSheet("padding: 8px 16px; font-weight: bold; min-height: 24px;")
         self.btn_load_to_app.setEnabled(False)
         self.btn_load_to_app.clicked.connect(self.on_load_to_app_clicked)
         bottom_row.addWidget(self.btn_load_to_app)
 
-        self.btn_flash_to_kb = QPushButton("⚡ Wgraj do klawiatury (Flash)")
+        self.btn_flash_to_kb = QPushButton(tr("pm_btn_flash", "⚡ Flash to Keyboard"))
         self.btn_flash_to_kb.setObjectName("successBtn")
         self.btn_flash_to_kb.setStyleSheet("padding: 8px 16px; font-weight: bold; min-height: 24px;")
         self.btn_flash_to_kb.setEnabled(False)
         self.btn_flash_to_kb.clicked.connect(self.on_flash_to_kb_clicked)
         bottom_row.addWidget(self.btn_flash_to_kb)
 
-        self.btn_delete = QPushButton("🗑️ Usuń")
+        self.btn_delete = QPushButton(tr("pm_btn_delete", "🗑️ Delete"))
         self.btn_delete.setObjectName("dangerBtn")
         self.btn_delete.setEnabled(False)
         self.btn_delete.clicked.connect(self.on_delete_clicked)
@@ -704,7 +613,7 @@ class ProfileManagerDialog(QDialog):
 
         bottom_row.addStretch()
 
-        btn_close = QPushButton("Zamknij")
+        btn_close = QPushButton(tr("pm_btn_close", "Close"))
         btn_close.clicked.connect(self.accept)
         bottom_row.addWidget(btn_close)
 
@@ -729,15 +638,15 @@ class ProfileManagerDialog(QDialog):
             self.table.setItem(row, 3, it_size)
 
         if not self.profiles_data:
-            self.lbl_selected_info.setText("Brak zapisanych profili w ~/.config/skyloong_studio/profiles/. Kliknij 'Zapisz bieżące ustawienia...' aby utworzyć profil!")
+            self.lbl_selected_info.setText(tr("pm_no_profiles"))
         else:
-            self.lbl_selected_info.setText(f"Dostępnych profili: {len(self.profiles_data)}. Wybierz profil, aby nim zarządzać.")
+            self.lbl_selected_info.setText(tr("pm_available_count", count=len(self.profiles_data)))
 
         self.on_selection_changed()
 
     def _get_selected_profile(self) -> Optional[Dict[str, Any]]:
         row = self.table.currentRow()
-        if row >= 0 and row < len(self.profiles_data):
+        if 0 <= row < len(self.profiles_data):
             return self.profiles_data[row]
         return None
 
@@ -751,7 +660,7 @@ class ProfileManagerDialog(QDialog):
 
         if p:
             self.lbl_selected_info.setText(
-                f"Wybrano: {p['name']} ({p['type']}, {p['size_str']}, zmodyfikowano: {p['date']})"
+                tr("pm_selected_info", name=p["name"], type=p["type"], size=p["size_str"], date=p["date"])
             )
 
     def on_table_double_clicked(self, item):
@@ -765,9 +674,9 @@ class ProfileManagerDialog(QDialog):
         if ok:
             if self.main_window and hasattr(self.main_window, "apply_loaded_state_to_ui"):
                 self.main_window.apply_loaded_state_to_ui()
-            QMessageBox.information(self, "Wczytano profil", f"{msg}\n\nUstawienia zostały pomyślnie załadowane do edytora!")
+            QMessageBox.information(self, tr("msg_success", "Success"), tr("msg_profile_loaded", name=p["name"]))
         else:
-            QMessageBox.critical(self, "Błąd wczytywania", msg)
+            QMessageBox.critical(self, tr("msg_error", "Error"), msg)
 
     def on_flash_to_kb_clicked(self):
         p = self._get_selected_profile()
@@ -775,8 +684,8 @@ class ProfileManagerDialog(QDialog):
             return
         reply = QMessageBox.question(
             self,
-            "Wgraj do klawiatury",
-            f"Czy na pewno chcesz wgrać profil '{p['name']}' bezpośrednio do pamięci Flash klawiatury?",
+            tr("pm_btn_flash", "Flash to Keyboard"),
+            f"Flash profile '{p['name']}' directly to keyboard memory?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes
         )
@@ -789,20 +698,20 @@ class ProfileManagerDialog(QDialog):
                     self.accept()
                     self.main_window.apply_full_configuration()
             else:
-                QMessageBox.critical(self, "Błąd", msg)
+                QMessageBox.critical(self, tr("msg_error", "Error"), msg)
 
     def on_save_current_clicked(self):
         name, ok = QInputDialog.getText(
             self,
-            "Zapisz nowy profil",
-            "Podaj nazwę dla zapisywanej konfiguracji (np. Profil_Praca, Gry_FPS, Makra_Knoby):"
+            tr("pm_btn_save_current", "Save Profile"),
+            "Enter profile name (e.g. Work_Layout, FPS_Gaming, Knob_Controls):"
         )
         if ok and name.strip():
             ptype, ok_type = QInputDialog.getItem(
                 self,
-                "Format pliku",
-                "Wybierz format zapisu:",
-                ["Profil JSON (.json - zalecany)", "Konfiguracja sprzętowa GK6X UserData (.txt)"],
+                "File Format",
+                "Select format:",
+                ["JSON Profile (.json - recommended)", "GK6X UserData (.txt)"],
                 0,
                 False
             )
@@ -812,16 +721,16 @@ class ProfileManagerDialog(QDialog):
                 self.refresh_profiles_list()
                 QMessageBox.information(
                     self,
-                    "Zapisano",
-                    f"Pomyślnie zapisano profil '{name.strip()}' do katalogu profili:\n{out_path}"
+                    tr("msg_success", "Success"),
+                    tr("msg_profile_saved", name=name.strip())
                 )
 
     def on_import_file_clicked(self):
         fname, _ = QFileDialog.getOpenFileName(
             self,
-            "Wybierz plik do importu",
+            "Select file to import",
             "",
-            "Pliki konfiguracji (*.json *.txt *.gkprofile);;Profil JSON (*.json *.gkprofile);;Plik UserData TXT (*.txt);;Wszystkie pliki (*)"
+            "Config Files (*.json *.txt *.gkprofile);;JSON Profile (*.json *.gkprofile);;UserData TXT (*.txt);;All files (*)"
         )
         if fname and os.path.exists(fname):
             basename = os.path.splitext(os.path.basename(fname))[0]
@@ -834,24 +743,24 @@ class ProfileManagerDialog(QDialog):
                     self.main_window.apply_loaded_state_to_ui()
                 QMessageBox.information(
                     self,
-                    "Import zakończony",
-                    f"{msg}\n\nProfil został dodany do biblioteki profili oraz załadowany do programu."
+                    tr("msg_success", "Success"),
+                    f"Profile '{basename}' imported and loaded."
                 )
             else:
-                QMessageBox.critical(self, "Błąd importu", msg)
+                QMessageBox.critical(self, tr("msg_error", "Error"), msg)
 
     def on_export_file_clicked(self):
         p = self._get_selected_profile()
         if not p:
             return
-        ext_filter = "Profil JSON (*.json)" if p["type"] == "JSON Profile" else "UserData TXT (*.txt)"
-        fname, _ = QFileDialog.getSaveFileName(self, "Eksportuj profil", p["filename"], f"{ext_filter};;Wszystkie pliki (*)")
+        ext_filter = "JSON Profile (*.json)" if p["type"] == "JSON Profile" else "UserData TXT (*.txt)"
+        fname, _ = QFileDialog.getSaveFileName(self, "Export Profile", p["filename"], f"{ext_filter};;All files (*)")
         if fname:
             try:
                 shutil.copy2(p["path"], fname)
-                QMessageBox.information(self, "Eksport", f"Pomyślnie wyeksportowano profil do:\n{fname}")
+                QMessageBox.information(self, tr("msg_success", "Success"), f"Exported to:\n{fname}")
             except Exception as e:
-                QMessageBox.critical(self, "Błąd", f"Nie udało się wyeksportować pliku: {e}")
+                QMessageBox.critical(self, tr("msg_error", "Error"), str(e))
 
     def on_delete_clicked(self):
         p = self._get_selected_profile()
@@ -859,23 +768,23 @@ class ProfileManagerDialog(QDialog):
             return
         reply = QMessageBox.question(
             self,
-            "Potwierdzenie usunięcia",
-            f"Czy na pewno chcesz bezpowrotnie usunąć profil '{p['name']}' ({p['filename']})?",
+            tr("pm_btn_delete", "Delete"),
+            tr("msg_delete_confirm", name=p["name"]),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         if reply == QMessageBox.Yes:
             if self.backend.delete_named_profile(p["filename"]):
                 self.refresh_profiles_list()
-                QMessageBox.information(self, "Usunięto", f"Usunięto profil '{p['name']}'.")
+                QMessageBox.information(self, tr("msg_success", "Success"), tr("msg_profile_deleted", name=p["name"]))
             else:
-                QMessageBox.warning(self, "Błąd", f"Nie udało się usunąć pliku {p['filename']}.")
+                QMessageBox.warning(self, tr("msg_error", "Error"), "Failed to delete file.")
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Skyloong GK104 Pro Studio — RGB • Remap • Makra • Knoby")
+        self.setWindowTitle(tr("app_window_title", "Skyloong GK104 Pro Studio — RGB • Remap • Macros • Knobs"))
         self.resize(1200, 880)
         self.setMinimumSize(960, 680)
 
@@ -891,6 +800,7 @@ class MainWindow(QMainWindow):
         # Remap state
         self.remap_key_buttons: Dict[str, KeyVisualButton] = {}
         self.knob_action_buttons: Dict[str, QPushButton] = {}
+        self.knob_preset_combos: List[QComboBox] = []
         self.selected_remap_key: Optional[str] = "LeftSpace" if self.space_mode == "split" else "Space_18"
         self.current_remap_layer = "Layer1"
 
@@ -933,12 +843,12 @@ class MainWindow(QMainWindow):
 
         # App Title & Device info
         title_box = QVBoxLayout()
-        title_lbl = QLabel("Skyloong GK104 Pro Studio")
-        title_lbl.setObjectName("appTitle")
-        title_lbl.setStyleSheet("font-size: 17px; font-weight: bold; color: #7aa2f7;")
-        title_box.addWidget(title_lbl)
+        self.title_lbl = QLabel(tr("app_title", "Skyloong GK104 Pro Studio"))
+        self.title_lbl.setObjectName("appTitle")
+        self.title_lbl.setStyleSheet("font-size: 17px; font-weight: bold; color: #7aa2f7;")
+        title_box.addWidget(self.title_lbl)
 
-        self.device_status_lbl = QLabel("Wykrywanie urządzenia GK104 Pro...")
+        self.device_status_lbl = QLabel(tr("device_detecting", "Detecting GK104 Pro device..."))
         self.device_status_lbl.setObjectName("deviceStatus")
         self.device_status_lbl.setStyleSheet("color: #9ece6a; font-size: 11px;")
         title_box.addWidget(self.device_status_lbl)
@@ -947,63 +857,67 @@ class MainWindow(QMainWindow):
         header_layout.addSpacing(10)
 
         # Battery Status Widget in Header
-        self.lbl_battery_header = QLabel("🔋 Bateria: Sprawdzanie...")
+        self.lbl_battery_header = QLabel(tr("battery_checking", "🔋 Battery: Checking..."))
         self.lbl_battery_header.setStyleSheet("color: #7aa2f7; font-size: 11px; font-weight: bold; background-color: #13141c; padding: 6px 10px; border-radius: 6px; border: 1px solid #24283b;")
         header_layout.addWidget(self.lbl_battery_header)
 
         header_layout.addStretch()
 
+        # Language Selector
+        lang_box = QHBoxLayout()
+        self.lbl_lang_header = QLabel(tr("lang_selector_label", "🌐 Language:"))
+        self.lbl_lang_header.setStyleSheet("color: #7aa2f7; font-size: 11px; font-weight: bold;")
+        lang_box.addWidget(self.lbl_lang_header)
+
+        self.lang_combo = QComboBox()
+        self.lang_combo.setStyleSheet("background-color: #24283b; color: #c0caf5; border: 1px solid #3b4261; border-radius: 6px; padding: 4px 8px; font-weight: bold; min-width: 100px; min-height: 24px;")
+        for code, name in get_available_languages():
+            self.lang_combo.addItem(name, code)
+
+        cur_lang = get_current_language()
+        for i in range(self.lang_combo.count()):
+            if self.lang_combo.itemData(i) == cur_lang:
+                self.lang_combo.setCurrentIndex(i)
+                break
+
+        self.lang_combo.currentIndexChanged.connect(self.on_language_selector_changed)
+        lang_box.addWidget(self.lang_combo)
+        header_layout.addLayout(lang_box)
+
+        header_layout.addSpacing(6)
+
         # Global Action Buttons
-        self.btn_check_system = QPushButton("⚙️ Wymagania")
-        self.btn_check_system.setToolTip("Sprawdź i skonfiguruj wymagania systemowe, Mono oraz reguły Udev")
+        self.btn_check_system = QPushButton(tr("btn_system_req", "⚙️ System"))
+        self.btn_check_system.setToolTip(tr("btn_system_req_tip", "Check and configure system dependencies, Mono and Udev rules"))
         self.btn_check_system.setStyleSheet("background-color: #24283b; color: #7aa2f7; border: 1px solid #3b4261; border-radius: 6px; padding: 6px 12px; min-height: 24px;")
         self.btn_check_system.clicked.connect(self.open_components_dialog)
         header_layout.addWidget(self.btn_check_system)
 
         # Profiles & Files Dropdown Menu Button
-        self.btn_profiles_menu = QPushButton("📁 Profile & Pliki ▾")
-        self.btn_profiles_menu.setToolTip("Zarządzaj zapisami konfiguracji, plikami UserData i profilami")
+        self.btn_profiles_menu = QPushButton(tr("btn_profiles_menu", "📁 Profiles & Files ▾"))
+        self.btn_profiles_menu.setToolTip(tr("btn_profiles_menu_tip", "Manage saved profiles, UserData files and backups"))
         self.btn_profiles_menu.setStyleSheet("background-color: #24283b; color: #7aa2f7; border: 1px solid #3b4261; border-radius: 6px; padding: 6px 12px; min-height: 24px; font-weight: bold;")
 
         self.profiles_menu = QMenu(self)
         self.profiles_menu.setStyleSheet("background-color: #1f2335; color: #c0caf5; border: 1px solid #414868; padding: 4px;")
-
-        act_open_mgr = self.profiles_menu.addAction("📋 Menedżer Zapisanych Profili...")
-        act_open_mgr.triggered.connect(self.open_profile_manager)
-
-        self.profiles_menu.addSeparator()
-
-        act_save_json = self.profiles_menu.addAction("💾 Zapisz profil jako JSON...")
-        act_save_json.triggered.connect(lambda: self.save_profile_dialog(default_type="json"))
-
-        act_save_txt = self.profiles_menu.addAction("📄 Zapisz kod sprzętowy (.txt UserData)...")
-        act_save_txt.triggered.connect(self.export_raw_config_dialog)
-
-        self.profiles_menu.addSeparator()
-
-        act_load_file = self.profiles_menu.addAction("📂 Wczytaj profil / plik konfiguracji (.json / .txt)...")
-        act_load_file.triggered.connect(lambda: self.load_profile_dialog(auto_apply=False))
-
-        act_flash_file = self.profiles_menu.addAction("⚡ Wczytaj plik i wgraj od razu do klawiatury...")
-        act_flash_file.triggered.connect(lambda: self.load_profile_dialog(auto_apply=True))
-
+        self._build_profiles_menu()
         self.btn_profiles_menu.setMenu(self.profiles_menu)
         header_layout.addWidget(self.btn_profiles_menu)
 
-        self.btn_refresh_dev = QPushButton("🔄 Odśwież")
-        self.btn_refresh_dev.setToolTip("Odśwież połączenie z klawiaturą")
+        self.btn_refresh_dev = QPushButton(tr("btn_refresh", "🔄 Refresh"))
+        self.btn_refresh_dev.setToolTip(tr("btn_refresh_tip", "Refresh device connection and hardware"))
         self.btn_refresh_dev.setStyleSheet("min-height: 24px; padding: 6px 12px;")
         self.btn_refresh_dev.clicked.connect(self.refresh_device)
         header_layout.addWidget(self.btn_refresh_dev)
 
-        self.btn_reset_mappings = QPushButton("⚠️ Reset (Unmap)")
-        self.btn_reset_mappings.setToolTip("Przywróć domyślny układ fabryczny")
+        self.btn_reset_mappings = QPushButton(tr("btn_reset", "⚠️ Reset (Unmap)"))
+        self.btn_reset_mappings.setToolTip(tr("btn_reset_tip", "Restore factory key mappings"))
         self.btn_reset_mappings.setObjectName("dangerBtn")
         self.btn_reset_mappings.setStyleSheet("min-height: 24px; padding: 6px 12px;")
         self.btn_reset_mappings.clicked.connect(self.reset_factory_mappings)
         header_layout.addWidget(self.btn_reset_mappings)
 
-        self.btn_apply_all = QPushButton("💾 WGRAJ DO KLAWIATURY")
+        self.btn_apply_all = QPushButton(tr("btn_flash", "💾 FLASH TO KEYBOARD"))
         self.btn_apply_all.setObjectName("primaryBtn")
         self.btn_apply_all.setStyleSheet("padding: 8px 18px; font-size: 12px; font-weight: bold; min-height: 24px;")
         self.btn_apply_all.clicked.connect(self.apply_full_configuration)
@@ -1013,10 +927,10 @@ class MainWindow(QMainWindow):
 
         # 2. Main Tab Widget
         self.tab_widget = QTabWidget()
-        self.tab_widget.addTab(self.create_lighting_tab(), "🌈 Oświetlenie LED")
-        self.tab_widget.addTab(self.create_remap_tab(), "⌨️ Remapowanie & Pokrętła (Knobs)")
-        self.tab_widget.addTab(self.create_macro_tab(), "⚡ Menedżer Makr (Macro Studio)")
-        self.tab_widget.addTab(self.create_debug_tab(), "📝 Podgląd Kodu & Diagnostyka")
+        self.tab_widget.addTab(self.create_lighting_tab(), tr("tab_lighting", "🌈 RGB Lighting"))
+        self.tab_widget.addTab(self.create_remap_tab(), tr("tab_remap", "⌨️ Remap & Knobs"))
+        self.tab_widget.addTab(self.create_macro_tab(), tr("tab_macro", "⚡ Macro Studio"))
+        self.tab_widget.addTab(self.create_debug_tab(), tr("tab_debug", "📝 Code & Diagnostics"))
         self.tab_widget.setCurrentIndex(1)  # Default to Remap tab
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
 
@@ -1024,58 +938,273 @@ class MainWindow(QMainWindow):
 
         # 3. Bottom Status / Progress Bar
         bottom_box = QHBoxLayout()
-        self.lbl_bottom_info = QLabel("Gotowy do pracy.")
+        self.lbl_bottom_info = QLabel(tr("lbl_status_ready", "Ready."))
         self.lbl_bottom_info.setStyleSheet("color: #7982a9; font-size: 11px;")
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 0)
-        self.progress_bar.setFixedHeight(6)
-        self.progress_bar.setVisible(False)
+        self.progress_bar.setFixedHeight(12)
         self.progress_bar.setFixedWidth(160)
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #3b4261;
+                border-radius: 6px;
+                background-color: #1a1b26;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #7aa2f7;
+                border-radius: 5px;
+            }
+        """)
 
         bottom_box.addWidget(self.lbl_bottom_info)
         bottom_box.addStretch()
         bottom_box.addWidget(self.progress_bar)
         main_layout.addLayout(bottom_box)
 
-    # =========================================================================
-    # VIRTUAL KEYBOARD BUILDER (Handles Split Spacebar & Standard Spacebar)
-    # =========================================================================
+    def _build_profiles_menu(self):
+        self.profiles_menu.clear()
+        act_open_mgr = self.profiles_menu.addAction(tr("menu_profile_manager", "📋 Saved Profiles Manager..."))
+        act_open_mgr.triggered.connect(self.open_profile_manager)
+
+        self.profiles_menu.addSeparator()
+
+        act_save_json = self.profiles_menu.addAction(tr("menu_save_json", "💾 Save Profile as JSON..."))
+        act_save_json.triggered.connect(lambda: self.save_profile_dialog(default_type="json"))
+
+        act_save_txt = self.profiles_menu.addAction(tr("menu_save_txt", "📄 Save Hardware Code (.txt UserData)..."))
+        act_save_txt.triggered.connect(self.export_raw_config_dialog)
+
+        self.profiles_menu.addSeparator()
+
+        act_load_file = self.profiles_menu.addAction(tr("menu_load_file", "📂 Load Profile / Config file (.json / .txt)..."))
+        act_load_file.triggered.connect(lambda: self.load_profile_dialog(auto_apply=False))
+
+        act_flash_file = self.profiles_menu.addAction(tr("menu_flash_file", "⚡ Load File & Flash directly to Keyboard..."))
+        act_flash_file.triggered.connect(lambda: self.load_profile_dialog(auto_apply=True))
+
+    def on_language_selector_changed(self, index: int):
+        code = self.lang_combo.itemData(index)
+        if code and code != get_current_language():
+            set_current_language(code)
+            self.retranslate_ui()
+
+    def retranslate_ui(self):
+        """Dynamically retranslate all labels, buttons, tabs and inspectors."""
+        self.setWindowTitle(tr("app_window_title", "Skyloong GK104 Pro Studio — RGB • Remap • Macros • Knobs"))
+        self.title_lbl.setText(tr("app_title", "Skyloong GK104 Pro Studio"))
+        self.lbl_lang_header.setText(tr("lang_selector_label", "🌐 Language:"))
+        self.btn_check_system.setText(tr("btn_system_req", "⚙️ System"))
+        self.btn_check_system.setToolTip(tr("btn_system_req_tip"))
+        self.btn_profiles_menu.setText(tr("btn_profiles_menu", "📁 Profiles & Files ▾"))
+        self.btn_profiles_menu.setToolTip(tr("btn_profiles_menu_tip"))
+        self._build_profiles_menu()
+        self.btn_refresh_dev.setText(tr("btn_refresh", "🔄 Refresh"))
+        self.btn_refresh_dev.setToolTip(tr("btn_refresh_tip"))
+        self.btn_reset_mappings.setText(tr("btn_reset", "⚠️ Reset (Unmap)"))
+        self.btn_reset_mappings.setToolTip(tr("btn_reset_tip"))
+        self.btn_apply_all.setText(tr("btn_flash", "💾 FLASH TO KEYBOARD"))
+        self.lbl_bottom_info.setText(tr("lbl_status_ready", "Ready."))
+
+        # Retranslate Tabs
+        self.tab_widget.setTabText(0, tr("tab_lighting", "🌈 RGB Lighting"))
+        self.tab_widget.setTabText(1, tr("tab_remap", "⌨️ Remap & Knobs"))
+        self.tab_widget.setTabText(2, tr("tab_macro", "⚡ Macro Studio"))
+        self.tab_widget.setTabText(3, tr("tab_debug", "📝 Code & Diagnostics"))
+
+        # Retranslate RGB Tab
+        if hasattr(self, "lbl_rgb_title"):
+            self.lbl_rgb_title.setText(tr("rgb_header_title"))
+        if hasattr(self, "btn_toggle_anim"):
+            self.btn_toggle_anim.setText(tr("rgb_pause_anim") if self.live_anim.is_running else tr("rgb_start_anim"))
+        if hasattr(self, "lbl_rgb_speed"):
+            self.lbl_rgb_speed.setText(tr("rgb_speed_label"))
+        if hasattr(self, "lbl_rgb_space_mode"):
+            self.lbl_rgb_space_mode.setText(tr("rgb_space_layout_label"))
+        if hasattr(self, "rgb_radio_split_space"):
+            self.rgb_radio_split_space.setText(tr("rgb_space_split"))
+        if hasattr(self, "rgb_radio_single_space"):
+            self.rgb_radio_single_space.setText(tr("rgb_space_standard"))
+        if hasattr(self, "lbl_rgb_target_layer"):
+            self.lbl_rgb_target_layer.setText(tr("rgb_target_layer"))
+        if hasattr(self, "lbl_effects_lib"):
+            self.lbl_effects_lib.setText(tr("rgb_effects_library"))
+        if hasattr(self, "effect_search_input"):
+            self.effect_search_input.setPlaceholderText(tr("rgb_search_placeholder"))
+        if hasattr(self, "btn_apply_effect"):
+            self.btn_apply_effect.setText(tr("rgb_apply_effect_btn"))
+        if hasattr(self, "lbl_rgb_tools_title"):
+            self.lbl_rgb_tools_title.setText(tr("rgb_tools_title"))
+        if hasattr(self, "lbl_rgb_current_brush"):
+            self.lbl_rgb_current_brush.setText(tr("rgb_current_brush"))
+        if hasattr(self, "btn_pick_color"):
+            self.btn_pick_color.setText(tr("rgb_pick_color_btn"))
+        if hasattr(self, "zone_group"):
+            self.zone_group.setTitle(tr("rgb_zone_painting"))
+        if hasattr(self, "theme_group"):
+            self.theme_group.setTitle(tr("rgb_color_themes"))
+        if hasattr(self, "bright_group"):
+            self.bright_group.setTitle(tr("rgb_brightness_title"))
+        if hasattr(self, "lbl_brightness_val"):
+            self.lbl_brightness_val.setText(tr("rgb_brightness_label", val=int(self.brightness_slider.value())))
+        if hasattr(self, "btn_apply_bright"):
+            self.btn_apply_bright.setText(tr("rgb_btn_apply_bright"))
+        if hasattr(self, "btn_led_off"):
+            self.btn_led_off.setText(tr("rgb_btn_led_off"))
+        if hasattr(self, "btn_apply_static"):
+            self.btn_apply_static.setText(tr("rgb_btn_apply_static"))
+
+        # Retranslate Remap Tab
+        if hasattr(self, "lbl_remap_layer"):
+            self.lbl_remap_layer.setText(tr("remap_active_layer"))
+        if hasattr(self, "remap_layer_combo"):
+            cur_l = self.remap_layer_combo.currentData()
+            self.remap_layer_combo.blockSignals(True)
+            self.remap_layer_combo.clear()
+            for lid, lname in get_available_layers():
+                self.remap_layer_combo.addItem(lname, lid)
+            idx = self.remap_layer_combo.findData(cur_l)
+            if idx >= 0:
+                self.remap_layer_combo.setCurrentIndex(idx)
+            self.remap_layer_combo.blockSignals(False)
+
+        if hasattr(self, "lbl_remap_space_mode"):
+            self.lbl_remap_space_mode.setText(tr("remap_space_mode"))
+        if hasattr(self, "remap_radio_split_space"):
+            self.remap_radio_split_space.setText(tr("remap_space_split"))
+        if hasattr(self, "remap_radio_single_space"):
+            self.remap_radio_single_space.setText(tr("remap_space_standard"))
+        if hasattr(self, "btn_clear_layer_top"):
+            self.btn_clear_layer_top.setText(tr("remap_btn_clear_layer"))
+        if hasattr(self, "remap_title_header"):
+            self.remap_title_header.setText(tr("rgb_header_title"))
+        if hasattr(self, "legend_knob"):
+            self.legend_knob.setText(tr("remap_knobs_title"))
+        if hasattr(self, "knobs_title"):
+            self.knobs_title.setText(tr("remap_knobs_title"))
+        if hasattr(self, "btn_copy_knobs"):
+            self.btn_copy_knobs.setText(tr("remap_btn_copy_knobs"))
+            self.btn_copy_knobs.setToolTip(tr("remap_btn_copy_knobs_tip"))
+        if hasattr(self, "lbl_assign_header_title"):
+            self.lbl_assign_header_title.setText(tr("remap_inspector_title"))
+        if hasattr(self, "remap_action_search"):
+            self.remap_action_search.setPlaceholderText(tr("remap_search_placeholder"))
+        if hasattr(self, "btn_assign_action"):
+            self.btn_assign_action.setText(tr("remap_btn_assign"))
+        if hasattr(self, "btn_reset_single_key"):
+            self.btn_reset_single_key.setText(tr("remap_btn_reset_key"))
+        if hasattr(self, "lbl_remap_table_title"):
+            self.lbl_remap_table_title.setText(tr("remap_table_title", layer=self.current_remap_layer))
+        if hasattr(self, "remap_table"):
+            self.remap_table.setHorizontalHeaderLabels([
+                tr("remap_col_key"),
+                tr("remap_col_action"),
+                tr("remap_col_code"),
+                tr("remap_col_delete")
+            ])
+        if hasattr(self, "btn_clear_layer_bottom"):
+            self.btn_clear_layer_bottom.setText(tr("remap_btn_clear_layer"))
+
+        # Retranslate Macro Tab
+        if hasattr(self, "macro_lib_group"):
+            self.macro_lib_group.setTitle(tr("macro_library_title"))
+        if hasattr(self, "btn_new_macro"):
+            self.btn_new_macro.setText(tr("macro_btn_new"))
+        if hasattr(self, "btn_del_macro"):
+            self.btn_del_macro.setText(tr("macro_btn_delete"))
+        if hasattr(self, "btn_dup_macro"):
+            self.btn_dup_macro.setText(tr("macro_btn_dup"))
+        if hasattr(self, "btn_rename_macro"):
+            self.btn_rename_macro.setText(tr("macro_btn_rename"))
+        if hasattr(self, "macro_editor_group"):
+            self.macro_editor_group.setTitle(tr("macro_editor_title"))
+        if hasattr(self, "lbl_macro_name"):
+            self.lbl_macro_name.setText(tr("macro_name_label"))
+        if hasattr(self, "lbl_macro_repeat"):
+            self.lbl_macro_repeat.setText(tr("macro_repeat_label"))
+        if hasattr(self, "lbl_macro_repeat_count"):
+            self.lbl_macro_repeat_count.setText(tr("macro_repeat_count"))
+        if hasattr(self, "macro_actions_table"):
+            self.macro_actions_table.setHorizontalHeaderLabels([
+                tr("macro_table_col_event"),
+                tr("macro_table_col_key"),
+                tr("macro_table_col_delay"),
+                "Action"
+            ])
+        if hasattr(self, "btn_add_macro_step"):
+            self.btn_add_macro_step.setText(tr("macro_btn_add_step"))
+        if hasattr(self, "btn_clear_macro_steps"):
+            self.btn_clear_macro_steps.setText(tr("macro_btn_clear_steps"))
+        if hasattr(self, "text_macro_group"):
+            self.text_macro_group.setTitle(tr("macro_quick_text_title"))
+        if hasattr(self, "lbl_quick_text_hint"):
+            self.lbl_quick_text_hint.setText(tr("macro_quick_text_label"))
+        if hasattr(self, "lbl_quick_text_speed"):
+            self.lbl_quick_text_speed.setText(tr("macro_quick_text_speed"))
+        if hasattr(self, "btn_generate_text_macro"):
+            self.btn_generate_text_macro.setText(tr("macro_quick_text_btn"))
+
+        # Retranslate Debug Tab
+        if hasattr(self, "lbl_debug_code_title"):
+            self.lbl_debug_code_title.setText(tr("debug_code_title"))
+        if hasattr(self, "btn_refresh_code"):
+            self.btn_refresh_code.setText(tr("debug_btn_refresh"))
+        if hasattr(self, "btn_copy_code"):
+            self.btn_copy_code.setText(tr("debug_btn_copy"))
+        if hasattr(self, "btn_export_code"):
+            self.btn_export_code.setText(tr("debug_btn_export"))
+        if hasattr(self, "lbl_debug_log_title"):
+            self.lbl_debug_log_title.setText(tr("debug_log_title"))
+        if hasattr(self, "btn_clear_log"):
+            self.btn_clear_log.setText(tr("debug_btn_clear_log"))
+        if hasattr(self, "btn_check_bridge"):
+            self.btn_check_bridge.setText(tr("debug_bridge_status"))
+
+        # Refresh components & trays
+        self.refresh_device()
+        self.load_effects()
+        self.refresh_remap_ui()
+        self.refresh_macro_list_ui()
+        self.init_system_tray()
+
     def build_keyboard_grid(self, grid_layout: QGridLayout, buttons_dict: Dict[str, KeyVisualButton],
-                            click_handler, space_mode: str, mode: str = "rgb"):
-        # Clear existing widgets from layout
+                            click_handler, space_mode: str = "split", mode: str = "rgb"):
+        """Populate the grid layout with styled visual keys matching physical 104-key GK104 Pro layout."""
+        # Clear existing buttons
         while grid_layout.count():
             item = grid_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
         buttons_dict.clear()
 
-        # Rows 0 to 4
-        for key_info in KEY_DEFINITIONS:
-            if key_info["row"] < 5:
-                w_u = key_info.get("width", 1.0)
-                h_u = key_info.get("height", 1.0)
+        # Build Rows 0 to 4 (F-Row, Numbers, QWERTY, ASDF, ZXCV)
+        for k in KEY_DEFINITIONS:
+            if k["row"] < 5:
+                w_u = k.get("width", 1.0)
+                h_u = k.get("height", 1.0)
                 btn = KeyVisualButton(
-                    key_id=key_info["id"],
-                    label=key_info["label"],
-                    group=key_info["group"],
+                    key_id=k["id"],
+                    label=k["label"],
+                    group=k["group"],
                     width_u=w_u,
                     height_u=h_u,
-                    knob_id=key_info.get("knob_id"),
-                    knob_name=key_info.get("knob_name"),
+                    knob_id=k.get("knob_id"),
+                    knob_name=k.get("knob_name"),
                     mode=mode
                 )
-                btn.row = key_info["row"]
-                btn.col = key_info["col"]
+                btn.row = k["row"]
+                btn.col = k["col"]
                 btn.key_clicked.connect(click_handler)
-
-                row = key_info["row"]
-                col_pos = int(round(key_info["col"] * 8))
+                row = k["row"]
+                col_pos = int(round(k["col"] * 8))
                 col_span = int(round(w_u * 8))
                 row_span = int(round(h_u))
                 grid_layout.addWidget(btn, row, col_pos, row_span, col_span)
-                buttons_dict[key_info["id"]] = btn
+                buttons_dict[k["id"]] = btn
 
-        # Row 5 (Bottom Row with Spacebar Options)
+        # Build Row 5 (Bottom Row with Spacebar module)
         bottom_keys = [
             {"id": "LCtrl", "label": "Ctrl", "group": "mod", "col": 0.0, "width": 1.25},
             {"id": "LWin", "label": "Win", "group": "mod", "col": 1.25, "width": 1.25},
@@ -1084,8 +1213,9 @@ class MainWindow(QMainWindow):
 
         if space_mode == "split":
             bottom_keys.extend([
-                {"id": "LeftSpace", "label": "⎵ Lewa Spacja", "group": "mod", "col": 3.75, "width": 3.125},
-                {"id": "RightSpace", "label": "⎵ Prawa Spacja", "group": "mod", "col": 6.875, "width": 3.125},
+                {"id": "LeftSpace", "label": "Space L", "group": "mod", "col": 3.75, "width": 2.25},
+                {"id": "StandardSpace", "label": "Space M", "group": "mod", "col": 6.0, "width": 2.75},
+                {"id": "RightSpace", "label": "Space R", "group": "mod", "col": 8.75, "width": 1.25}
             ])
         else:
             bottom_keys.append(
@@ -1143,18 +1273,19 @@ class MainWindow(QMainWindow):
 
         # Top Control Bar for Lighting Tab
         top_ctrl_bar = QHBoxLayout()
-        lbl_title = QLabel("Wizualna Klawiatura 104 • Podgląd Animacji & Malowanie")
-        lbl_title.setStyleSheet("font-weight: bold; color: #7aa2f7; font-size: 13px;")
-        top_ctrl_bar.addWidget(lbl_title)
+        self.lbl_rgb_title = QLabel(tr("rgb_header_title", "104 Visual Keyboard • Live Animation Preview & Color Painter"))
+        self.lbl_rgb_title.setStyleSheet("font-weight: bold; color: #7aa2f7; font-size: 13px;")
+        top_ctrl_bar.addWidget(self.lbl_rgb_title)
         top_ctrl_bar.addStretch()
 
         # Live Animation Preview Controls
-        self.btn_toggle_anim = QPushButton("⏸ Wstrzymaj podgląd")
+        self.btn_toggle_anim = QPushButton(tr("rgb_pause_anim", "⏸ Pause Preview"))
         self.btn_toggle_anim.setStyleSheet("background-color: #2b3b55; color: #7dcfff; font-weight: bold; padding: 4px 10px; min-height: 24px;")
         self.btn_toggle_anim.clicked.connect(self.toggle_live_animation)
         top_ctrl_bar.addWidget(self.btn_toggle_anim)
 
-        top_ctrl_bar.addWidget(QLabel("Prędkość:"))
+        self.lbl_rgb_speed = QLabel(tr("rgb_speed_label", "Speed:"))
+        top_ctrl_bar.addWidget(self.lbl_rgb_speed)
         self.slider_anim_speed = QSlider(Qt.Horizontal)
         self.slider_anim_speed.setRange(2, 30)
         self.slider_anim_speed.setValue(10)
@@ -1165,9 +1296,10 @@ class MainWindow(QMainWindow):
         top_ctrl_bar.addSpacing(12)
 
         # Spacebar mode selector in RGB tab
-        top_ctrl_bar.addWidget(QLabel("Układ Spacji:"))
-        self.rgb_radio_split_space = QRadioButton("Podwójna (Split)")
-        self.rgb_radio_single_space = QRadioButton("Standard")
+        self.lbl_rgb_space_mode = QLabel(tr("rgb_space_layout_label", "Spacebar Layout:"))
+        top_ctrl_bar.addWidget(self.lbl_rgb_space_mode)
+        self.rgb_radio_split_space = QRadioButton(tr("rgb_space_split", "Split (2.25+2.75+1.25)"))
+        self.rgb_radio_single_space = QRadioButton(tr("rgb_space_standard", "Standard (6.25u)"))
         if self.space_mode == "split":
             self.rgb_radio_split_space.setChecked(True)
         else:
@@ -1181,7 +1313,8 @@ class MainWindow(QMainWindow):
         self.rgb_layer_combo = QComboBox()
         self.rgb_layer_combo.addItems(["Base", "Layer1", "Layer2", "Layer3"])
         self.rgb_layer_combo.currentIndexChanged.connect(self.on_rgb_layer_changed)
-        top_ctrl_bar.addWidget(QLabel("Docelowa warstwa LED:"))
+        self.lbl_rgb_target_layer = QLabel(tr("rgb_target_layer", "Target LED Layer:"))
+        top_ctrl_bar.addWidget(self.lbl_rgb_target_layer)
         top_ctrl_bar.addWidget(self.rgb_layer_combo)
         layout.addLayout(top_ctrl_bar)
 
@@ -1209,33 +1342,31 @@ class MainWindow(QMainWindow):
         left_vbox = QVBoxLayout(left_card)
         left_vbox.setContentsMargins(8, 8, 8, 8)
 
-        left_lbl = QLabel("🌊 Biblioteka Animacji (330+ efektów)")
-        left_lbl.setStyleSheet("font-weight: bold; color: #7aa2f7;")
-        left_vbox.addWidget(left_lbl)
+        self.lbl_effects_lib = QLabel(tr("rgb_effects_library", "🌈 Built-In Animation Effects Library"))
+        self.lbl_effects_lib.setStyleSheet("font-weight: bold; color: #7aa2f7;")
+        left_vbox.addWidget(self.lbl_effects_lib)
 
-        search_box = QHBoxLayout()
+        # Search bar & category filter
+        filter_bar = QHBoxLayout()
         self.effect_search_input = QLineEdit()
-        self.effect_search_input.setPlaceholderText("Szukaj animacji (np. Rainbow, Wave, Breath, Meteor)...")
+        self.effect_search_input.setPlaceholderText(tr("rgb_search_placeholder", "Search effect (e.g. Rainbow, Wave, Breath, Matrix)..."))
         self.effect_search_input.textChanged.connect(self.filter_effects)
-        search_box.addWidget(self.effect_search_input)
+        filter_bar.addWidget(self.effect_search_input)
 
         self.category_combo = QComboBox()
-        self.category_combo.addItem("Wszystkie kategorie")
         self.category_combo.currentIndexChanged.connect(self.filter_effects)
-        search_box.addWidget(self.category_combo)
-        left_vbox.addLayout(search_box)
+        filter_bar.addWidget(self.category_combo)
+        left_vbox.addLayout(filter_bar)
 
         self.effects_list_widget = QListWidget()
-        self.effects_list_widget.setMinimumHeight(180)
         self.effects_list_widget.currentItemChanged.connect(self.on_effect_list_item_changed)
         self.effects_list_widget.itemDoubleClicked.connect(self.on_effect_double_clicked)
         left_vbox.addWidget(self.effects_list_widget)
 
-        btn_apply_effect = QPushButton("✨ Zastosuj wybraną animację do klawiatury")
-        btn_apply_effect.setObjectName("primaryBtn")
-        btn_apply_effect.clicked.connect(self.apply_selected_effect)
-        left_vbox.addWidget(btn_apply_effect)
-
+        self.btn_apply_effect = QPushButton(tr("rgb_apply_effect_btn", "⚡ Apply Effect to Keyboard"))
+        self.btn_apply_effect.setObjectName("primaryBtn")
+        self.btn_apply_effect.clicked.connect(self.apply_selected_effect)
+        left_vbox.addWidget(self.btn_apply_effect)
         splitter.addWidget(left_card)
 
         # Right: Palette, Presets & Zones
@@ -1245,22 +1376,23 @@ class MainWindow(QMainWindow):
         right_vbox = QVBoxLayout(right_card)
         right_vbox.setContentsMargins(8, 8, 8, 8)
 
-        right_lbl = QLabel("🎨 Kolory & Narzędzia Malowania")
-        right_lbl.setStyleSheet("font-weight: bold; color: #7aa2f7;")
-        right_vbox.addWidget(right_lbl)
+        self.lbl_rgb_tools_title = QLabel(tr("rgb_tools_title", "🎨 Colors & Painting Tools"))
+        self.lbl_rgb_tools_title.setStyleSheet("font-weight: bold; color: #7aa2f7;")
+        right_vbox.addWidget(self.lbl_rgb_tools_title)
 
         # Color picker row
         brush_row = QHBoxLayout()
-        brush_row.addWidget(QLabel("Aktualny pędzel:"))
+        self.lbl_rgb_current_brush = QLabel(tr("rgb_current_brush", "Current brush:"))
+        brush_row.addWidget(self.lbl_rgb_current_brush)
         self.brush_preview_btn = QPushButton()
         self.brush_preview_btn.setFixedSize(36, 26)
         self.brush_preview_btn.setStyleSheet(f"background-color: {self.selected_brush_color}; border-radius: 4px;")
         self.brush_preview_btn.clicked.connect(self.open_color_dialog)
         brush_row.addWidget(self.brush_preview_btn)
 
-        btn_pick_color = QPushButton("Wybierz własny kolor...")
-        btn_pick_color.clicked.connect(self.open_color_dialog)
-        brush_row.addWidget(btn_pick_color)
+        self.btn_pick_color = QPushButton(tr("rgb_pick_color_btn", "Pick custom color..."))
+        self.btn_pick_color.clicked.connect(self.open_color_dialog)
+        brush_row.addWidget(self.btn_pick_color)
         brush_row.addStretch()
         right_vbox.addLayout(brush_row)
 
@@ -1280,32 +1412,36 @@ class MainWindow(QMainWindow):
         right_vbox.addLayout(pal_box)
 
         # Zone painting
-        zone_group = QGroupBox("Malowanie Strefowe")
-        zone_layout = QGridLayout(zone_group)
+        self.zone_group = QGroupBox(tr("rgb_zone_painting", "Zone Painting"))
+        zone_layout = QGridLayout(self.zone_group)
         zones = [
-            ("WASD", "wasd"), ("Strzałki", "arrows"), ("NumPad", "numpad"),
-            ("F1-F12", "func"), ("Litery", "alpha"), ("Cała klawiatura", "all")
+            (tr("rgb_zone_wasd", "WASD"), "wasd"),
+            (tr("rgb_zone_arrows", "Arrows"), "arrows"),
+            (tr("rgb_zone_numpad", "NumPad"), "numpad"),
+            (tr("rgb_zone_func", "F1-F12"), "func"),
+            (tr("rgb_zone_alpha", "Letters"), "alpha"),
+            (tr("rgb_zone_all", "Whole Board"), "all")
         ]
         for idx, (z_name, z_id) in enumerate(zones):
-            z_btn = QPushButton(f"Pomaluj: {z_name}")
+            z_btn = QPushButton(f"{tr('rgb_zone_btn_prefix', 'Paint: ')}{z_name}")
             z_btn.clicked.connect(lambda _, zid=z_id: self.paint_zone(zid))
             zone_layout.addWidget(z_btn, idx // 3, idx % 3)
-        right_vbox.addWidget(zone_group)
+        right_vbox.addWidget(self.zone_group)
 
         # Styled Themes
-        theme_group = QGroupBox("Gotowe Motywy Kolorystyczne")
-        theme_layout = QGridLayout(theme_group)
+        self.theme_group = QGroupBox(tr("rgb_color_themes", "Preset Color Schemes"))
+        theme_layout = QGridLayout(self.theme_group)
         for idx, t_name in enumerate(COLOR_PRESETS.keys()):
             t_btn = QPushButton(t_name)
             t_btn.clicked.connect(lambda _, tn=t_name: self.apply_preset_theme(tn))
             theme_layout.addWidget(t_btn, idx // 2, idx % 2)
-        right_vbox.addWidget(theme_group)
+        right_vbox.addWidget(self.theme_group)
 
         # Brightness Control Group
-        bright_group = QGroupBox("Jasność Podświetlenia Klawiatury")
-        bright_layout = QHBoxLayout(bright_group)
-        self.lbl_brightness_val = QLabel(f"Jasność: {self.backend.lighting_config.get('brightness', 100)}%")
-        self.lbl_brightness_val.setFixedWidth(100)
+        self.bright_group = QGroupBox(tr("rgb_brightness_title", "Keyboard Backlight Brightness"))
+        bright_layout = QHBoxLayout(self.bright_group)
+        self.lbl_brightness_val = QLabel(tr("rgb_brightness_label", val=int(self.backend.lighting_config.get('brightness', 100))))
+        self.lbl_brightness_val.setFixedWidth(120)
         self.lbl_brightness_val.setStyleSheet("font-weight: bold; color: #ff9eaf;")
         self.brightness_slider = QSlider(Qt.Horizontal)
         self.brightness_slider.setRange(0, 100)
@@ -1320,25 +1456,25 @@ class MainWindow(QMainWindow):
             btn_b.clicked.connect(lambda _, v=b_val: self.set_brightness_level(v))
             bright_layout.addWidget(btn_b)
 
-        btn_apply_bright = QPushButton("⚡ Zastosuj")
-        btn_apply_bright.setObjectName("primaryBtn")
-        btn_apply_bright.setFixedWidth(80)
-        btn_apply_bright.clicked.connect(self.apply_brightness_now)
-        bright_layout.addWidget(btn_apply_bright)
+        self.btn_apply_bright = QPushButton(tr("rgb_btn_apply_bright", "⚡ Apply"))
+        self.btn_apply_bright.setObjectName("primaryBtn")
+        self.btn_apply_bright.setFixedWidth(80)
+        self.btn_apply_bright.clicked.connect(self.apply_brightness_now)
+        bright_layout.addWidget(self.btn_apply_bright)
 
-        right_vbox.addWidget(bright_group)
+        right_vbox.addWidget(self.bright_group)
 
         # Tools: LED Off / Apply static
         tools_row = QHBoxLayout()
-        btn_led_off = QPushButton("🌙 Wyłącz LED")
-        btn_led_off.setObjectName("dangerBtn")
-        btn_led_off.clicked.connect(self.turn_off_led)
-        tools_row.addWidget(btn_led_off)
+        self.btn_led_off = QPushButton(tr("rgb_btn_led_off", "🌙 Turn off LED"))
+        self.btn_led_off.setObjectName("dangerBtn")
+        self.btn_led_off.clicked.connect(self.turn_off_led)
+        tools_row.addWidget(self.btn_led_off)
 
-        btn_apply_static = QPushButton("✅ Zastosuj Kolory z Klawiatury")
-        btn_apply_static.setObjectName("successBtn")
-        btn_apply_static.clicked.connect(self.apply_static_keyboard_colors)
-        tools_row.addWidget(btn_apply_static)
+        self.btn_apply_static = QPushButton(tr("rgb_btn_apply_static", "✅ Apply Static Colors"))
+        self.btn_apply_static.setObjectName("successBtn")
+        self.btn_apply_static.clicked.connect(self.apply_static_keyboard_colors)
+        tools_row.addWidget(self.btn_apply_static)
         right_vbox.addLayout(tools_row)
 
         splitter.addWidget(right_card)
@@ -1366,12 +1502,12 @@ class MainWindow(QMainWindow):
 
         # Layer Selector & Header
         top_bar = QHBoxLayout()
-        layer_lbl = QLabel("Wybierz warstwę do edycji:")
-        layer_lbl.setStyleSheet("font-weight: bold; color: #7aa2f7; font-size: 14px;")
-        top_bar.addWidget(layer_lbl)
+        self.lbl_remap_layer = QLabel(tr("remap_active_layer", "Active Layer:"))
+        self.lbl_remap_layer.setStyleSheet("font-weight: bold; color: #7aa2f7; font-size: 14px;")
+        top_bar.addWidget(self.lbl_remap_layer)
 
         self.remap_layer_combo = QComboBox()
-        for layer_id, layer_name in AVAILABLE_LAYERS:
+        for layer_id, layer_name in get_available_layers():
             self.remap_layer_combo.addItem(layer_name, layer_id)
         self.remap_layer_combo.setCurrentIndex(1)  # Layer1 default
         self.remap_layer_combo.currentIndexChanged.connect(self.on_remap_layer_changed)
@@ -1379,9 +1515,10 @@ class MainWindow(QMainWindow):
 
         top_bar.addSpacing(20)
         # Spacebar mode selector in Remap tab
-        top_bar.addWidget(QLabel("Układ Spacji:"))
-        self.remap_radio_split_space = QRadioButton("Podwójna spacja (Split)")
-        self.remap_radio_single_space = QRadioButton("Standardowa")
+        self.lbl_remap_space_mode = QLabel(tr("remap_space_mode", "Spacebar Module:"))
+        top_bar.addWidget(self.lbl_remap_space_mode)
+        self.remap_radio_split_space = QRadioButton(tr("remap_space_split", "Split (2.25+2.75+1.25)"))
+        self.remap_radio_single_space = QRadioButton(tr("remap_space_standard", "Standard (6.25u)"))
         if self.space_mode == "split":
             self.remap_radio_split_space.setChecked(True)
         else:
@@ -1393,22 +1530,22 @@ class MainWindow(QMainWindow):
 
         top_bar.addStretch()
 
-        btn_clear_layer = QPushButton("🗑️ Wyczyść mapowania tej warstwy")
-        btn_clear_layer.setStyleSheet("min-height: 24px; padding: 6px 12px;")
-        btn_clear_layer.clicked.connect(self.clear_current_layer_remaps)
-        top_bar.addWidget(btn_clear_layer)
+        self.btn_clear_layer_top = QPushButton(tr("remap_btn_clear_layer", "🗑️ Clear All Layer Remaps"))
+        self.btn_clear_layer_top.setStyleSheet("min-height: 24px; padding: 6px 12px;")
+        self.btn_clear_layer_top.clicked.connect(self.clear_current_layer_remaps)
+        top_bar.addWidget(self.btn_clear_layer_top)
         layout.addLayout(top_bar)
 
         # Interactive visual keyboard for remap with GK104 Pro Chassis
         remap_header = QHBoxLayout()
-        remap_title = QLabel("Wizualna Klawiatura 104 • Kliknij klawisz lub gniazdo pokrętła (🎛️), aby zmienić funkcję:")
-        remap_title.setStyleSheet("font-weight: bold; color: #7aa2f7;")
-        remap_header.addWidget(remap_title)
+        self.remap_title_header = QLabel(tr("rgb_header_title", "104 Visual Keyboard • Click key or knob socket (🎛️) to assign function:"))
+        self.remap_title_header.setStyleSheet("font-weight: bold; color: #7aa2f7;")
+        remap_header.addWidget(self.remap_title_header)
         remap_header.addStretch()
 
-        legend_knob = QLabel("🎛️ Gniazda Pokręteł (K1-K6)")
-        legend_knob.setStyleSheet("color: #ff9e3b; font-weight: bold; background-color: #2b2216; padding: 3px 8px; border-radius: 4px; border: 1px solid #ff9e3b;")
-        remap_header.addWidget(legend_knob)
+        self.legend_knob = QLabel(tr("remap_knobs_title", "🎛️ Knob Sockets (K1-K6)"))
+        self.legend_knob.setStyleSheet("color: #ff9e3b; font-weight: bold; background-color: #2b2216; padding: 3px 8px; border-radius: 4px; border: 1px solid #ff9e3b;")
+        remap_header.addWidget(self.legend_knob)
         layout.addLayout(remap_header)
 
         self.remap_chassis = GK104ChassisWidget()
@@ -1433,21 +1570,26 @@ class MainWindow(QMainWindow):
         knobs_vbox.setSpacing(8)
 
         knobs_header = QHBoxLayout()
-        knobs_title = QLabel("🎛️ Konfiguracja Pokręteł (Rotary Knobs — GK104 Pro)")
-        knobs_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #7aa2f7;")
-        knobs_header.addWidget(knobs_title)
+        self.knobs_title = QLabel(tr("remap_knobs_title", "🎛️ Modular Rotary Knobs (GK104 Pro Multi-Knob Control)"))
+        self.knobs_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #7aa2f7;")
+        knobs_header.addWidget(self.knobs_title)
         knobs_header.addStretch()
 
-        btn_copy_knobs = QPushButton("📋 Skopiuj te pokrętła na wszystkie warstwy (Base, Layer 1-3)")
-        btn_copy_knobs.setStyleSheet("background-color: #2b3b55; color: #7aa2f7; font-weight: bold; padding: 6px 12px; min-height: 24px;")
-        btn_copy_knobs.clicked.connect(self.copy_knobs_to_all_layers)
-        knobs_header.addWidget(btn_copy_knobs)
+        self.btn_copy_knobs = QPushButton(tr("remap_btn_copy_knobs", "📋 Copy Knobs to All Layers"))
+        self.btn_copy_knobs.setToolTip(tr("remap_btn_copy_knobs_tip", "Synchronize knob mappings across Base and Layers 1-3"))
+        self.btn_copy_knobs.setStyleSheet("background-color: #2b3b55; color: #7aa2f7; font-weight: bold; padding: 6px 12px; min-height: 24px;")
+        self.btn_copy_knobs.clicked.connect(self.copy_knobs_to_all_layers)
+        knobs_header.addWidget(self.btn_copy_knobs)
         knobs_vbox.addLayout(knobs_header)
 
         knobs_grid = QGridLayout()
         knobs_grid.setSpacing(8)
+        self.knob_preset_combos.clear()
 
-        for idx, knob_info in enumerate(KNOBS_METADATA):
+        knobs_meta = get_knobs_metadata()
+        knob_presets_dict = get_knob_presets()
+
+        for idx, knob_info in enumerate(knobs_meta):
             k_card = QFrame()
             k_card.setObjectName("knobCard")
             k_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
@@ -1463,8 +1605,8 @@ class MainWindow(QMainWindow):
             k_title_row.addStretch()
 
             preset_combo = QComboBox()
-            preset_combo.addItem("⚡ Szybki schemat...", "")
-            for p_name in KNOB_PRESETS.keys():
+            preset_combo.addItem(tr("remap_knob_presets_placeholder", "Preset..."), "")
+            for p_name in knob_presets_dict.keys():
                 preset_combo.addItem(p_name, p_name)
             preset_combo.currentIndexChanged.connect(
                 lambda _, kid=knob_info["id"], cb=preset_combo: self.on_knob_preset_applied(kid, cb)
@@ -1472,13 +1614,14 @@ class MainWindow(QMainWindow):
             preset_combo.setMinimumWidth(135)
             preset_combo.setFixedHeight(26)
             k_title_row.addWidget(preset_combo)
+            self.knob_preset_combos.append(preset_combo)
             k_card_vbox.addLayout(k_title_row)
 
             # Action buttons inside card (CW, CCW, Click)
             for act in knob_info["actions"]:
                 act_id = act["id"]
                 act_label = act["label"]
-                btn_act = QPushButton(f"{act_label}: Domyślny")
+                btn_act = QPushButton(f"{act_label}: Default")
                 btn_act.setProperty("class", "knobActionButton")
                 btn_act.setCursor(Qt.PointingHandCursor)
                 btn_act.setMinimumHeight(28)
@@ -1505,12 +1648,12 @@ class MainWindow(QMainWindow):
 
         # Header with selected element indicator & preview
         top_assign_header = QHBoxLayout()
-        self.lbl_selected_remap_key = QLabel("Edytowany element: [ Lewa Spacja ]")
+        self.lbl_selected_remap_key = QLabel(tr("remap_selected_item", name="Left Space"))
         self.lbl_selected_remap_key.setStyleSheet("font-size: 14px; font-weight: bold; color: #ff9eaf;")
         top_assign_header.addWidget(self.lbl_selected_remap_key)
         top_assign_header.addStretch()
 
-        self.lbl_picked_action_info = QLabel("Wybrana funkcja: (Wybierz poniżej)")
+        self.lbl_picked_action_info = QLabel(tr("remap_picked_action", action="(Select below)"))
         self.lbl_picked_action_info.setStyleSheet("font-size: 11px; font-weight: bold; color: #7dcfff; background-color: #141724; padding: 3px 8px; border-radius: 4px; border: 1px solid #292d3e;")
         top_assign_header.addWidget(self.lbl_picked_action_info)
         assign_vbox.addLayout(top_assign_header)
@@ -1518,7 +1661,7 @@ class MainWindow(QMainWindow):
         # Search bar for instant filtering of all actions
         search_row = QHBoxLayout()
         self.remap_action_search = QLineEdit()
-        self.remap_action_search.setPlaceholderText("🔍 Szybkie szukanie funkcji (np. głośność, jasność, kalkulator, enter, A, F1)...")
+        self.remap_action_search.setPlaceholderText(tr("remap_search_placeholder", "Search key or function (e.g. Volume, Backlight, Calculator, Enter)..."))
         self.remap_action_search.textChanged.connect(self.on_remap_search_changed)
         search_row.addWidget(self.remap_action_search)
 
@@ -1528,13 +1671,13 @@ class MainWindow(QMainWindow):
         search_row.addWidget(btn_clear_search)
         assign_vbox.addLayout(search_row)
 
-        # Tabbed categories matching official Skyloong software (Primary, Number Pad, Media, Light, System/Net, Mouse, etc.)
+        # Tabbed categories
         self.remap_category_tabs = QTabWidget()
         self.category_action_buttons: Dict[str, List[QPushButton]] = {}
         self.current_picked_action: Optional[str] = None
 
-        # Build category tabs
-        for cat_title, cat_items in TARGET_KEY_CATEGORIES.items():
+        target_cats = get_target_key_categories()
+        for cat_title, cat_items in target_cats.items():
             tab_page = QWidget()
             tab_layout = QVBoxLayout(tab_page)
             tab_layout.setContentsMargins(4, 6, 4, 4)
@@ -1558,131 +1701,137 @@ class MainWindow(QMainWindow):
             cols = 4 if "Primary" in cat_title else 3
 
             for idx, (action_code, action_label) in enumerate(cat_items):
-                btn_act = QPushButton(action_label)
-                btn_act.setProperty("action_code", action_code)
-                btn_act.setProperty("action_label", action_label)
-                btn_act.setStyleSheet("""
-                    QPushButton {
-                        background-color: #24293e;
-                        border: 1px solid #3b4261;
-                        border-radius: 6px;
-                        padding: 4px 6px;
-                        font-size: 11px;
-                        font-weight: bold;
-                        text-align: center;
-                        color: #c0caf5;
-                        min-height: 28px;
-                    }
-                    QPushButton:hover {
-                        background-color: #2f3652;
-                        border: 1px solid #7aa2f7;
-                        color: #ffffff;
-                    }
-                """)
-                btn_act.setCursor(Qt.PointingHandCursor)
-                btn_act.setMinimumHeight(28)
-                btn_act.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                btn_act.clicked.connect(lambda _, code=action_code, lbl=action_label, b=btn_act: self.on_category_action_clicked(code, lbl, b))
-                btn_act.setToolTip(f"Kliknij, aby wybrać. Kod: {action_code}")
-                grid_layout.addWidget(btn_act, idx // cols, idx % cols)
-                self.category_action_buttons[cat_title].append(btn_act)
+                btn = QPushButton(action_label)
+                btn.setProperty("action_code", action_code)
+                btn.setProperty("action_label", action_label)
+                btn.setCursor(Qt.PointingHandCursor)
+                btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+                btn.setMinimumHeight(28)
+                btn.clicked.connect(lambda _, c=action_code, l=action_label, b=btn: self.on_action_picked(c, l, b))
+                grid_layout.addWidget(btn, idx // cols, idx % cols)
+                self.category_action_buttons[cat_title].append(btn)
 
-            grid_layout.setRowStretch(grid_layout.rowCount(), 1)
             scroll.setWidget(grid_widget)
             tab_layout.addWidget(scroll)
             self.remap_category_tabs.addTab(tab_page, cat_title)
 
-        # Tab: Modifiers Combination (Shortcuts)
+        # Custom Modifier Combination Tab
         tab_combo = QWidget()
-        v_combo = QVBoxLayout(tab_combo)
-        v_combo.setContentsMargins(6, 6, 6, 6)
-        v_combo.setSpacing(6)
-        v_combo.addWidget(QLabel("Zaznacz modyfikatory i wybierz klawisz bazowy:"))
+        combo_layout = QVBoxLayout(tab_combo)
+        combo_layout.setContentsMargins(8, 8, 8, 8)
+        combo_layout.setSpacing(8)
 
-        mod_box = QHBoxLayout()
-        self.chk_ctrl = QCheckBox("Ctrl")
-        self.chk_shift = QCheckBox("Shift")
-        self.chk_alt = QCheckBox("Alt")
-        self.chk_win = QCheckBox("Win")
+        mods_box = QHBoxLayout()
+        mods_box.addWidget(QLabel(tr("remap_combos_modifiers", "Modifiers:")))
+        self.chk_ctrl = QCheckBox("Ctrl (LCtrl)")
+        self.chk_shift = QCheckBox("Shift (LShift)")
+        self.chk_alt = QCheckBox("Alt (LAlt)")
+        self.chk_win = QCheckBox("Win (Super)")
         for chk in [self.chk_ctrl, self.chk_shift, self.chk_alt, self.chk_win]:
-            chk.toggled.connect(self.update_combination_preview)
-            mod_box.addWidget(chk)
-        v_combo.addLayout(mod_box)
+            chk.stateChanged.connect(self.update_combination_preview)
+            mods_box.addWidget(chk)
+        mods_box.addStretch()
+        combo_layout.addLayout(mods_box)
 
-        combo_base_row = QHBoxLayout()
-        combo_base_row.addWidget(QLabel("Klawisz bazowy:"))
+        base_key_row = QHBoxLayout()
+        base_key_row.addWidget(QLabel(tr("remap_combos_base_key", "Base Key:")))
         self.combo_base_key = QComboBox()
-        for cat_name, keys in TARGET_KEY_CATEGORIES.items():
-            if "Primary" in cat_name or "Number Pad" in cat_name or "Media" in cat_name:
-                for kid, klabel in keys:
-                    self.combo_base_key.addItem(f"{klabel} ({kid})", kid)
+        for k in KEY_DEFINITIONS:
+            self.combo_base_key.addItem(f"{k['label']} [{k['id']}]", k["id"])
         self.combo_base_key.currentIndexChanged.connect(self.update_combination_preview)
-        combo_base_row.addWidget(self.combo_base_key)
-        v_combo.addLayout(combo_base_row)
+        base_key_row.addWidget(self.combo_base_key)
 
-        v_combo.addWidget(QLabel("Lub wybierz gotowy popularny skrót:"))
+        base_key_row.addSpacing(14)
+        base_key_row.addWidget(QLabel(tr("remap_combos_popular", "Popular Shortcuts:")))
         self.popular_shortcuts_combo = QComboBox()
-        self.popular_shortcuts_combo.addItem("-- Wybierz gotowy skrót --", "")
-        for s_code, s_desc in POPULAR_SHORTCUTS:
-            self.popular_shortcuts_combo.addItem(s_desc, s_code)
+        self.popular_shortcuts_combo.addItem(tr("remap_knob_presets_placeholder", "Choose shortcut..."), "")
+        for short_name, short_code, short_desc in get_popular_shortcuts():
+            self.popular_shortcuts_combo.addItem(f"{short_desc} ({short_name})", short_code)
         self.popular_shortcuts_combo.currentIndexChanged.connect(self.on_popular_shortcut_selected)
-        v_combo.addWidget(self.popular_shortcuts_combo)
-        v_combo.addStretch()
-        self.remap_category_tabs.addTab(tab_combo, "⚡ Kombinacja (Skrót)")
+        base_key_row.addWidget(self.popular_shortcuts_combo)
+        base_key_row.addStretch()
+        combo_layout.addLayout(base_key_row)
 
-        # Tab: Macro
-        tab_macro = QWidget()
-        v_macro = QVBoxLayout(tab_macro)
-        v_macro.setContentsMargins(6, 6, 6, 6)
-        v_macro.setSpacing(6)
-        v_macro.addWidget(QLabel("Wybierz zdefiniowane makro z listy:"))
+        combo_layout.addStretch()
+        self.remap_category_tabs.addTab(tab_combo, tr("remap_cat_combos", "⚡ Combinations"))
+
+        # Macro Tab in Remap Inspector
+        tab_macro_remap = QWidget()
+        mremap_layout = QVBoxLayout(tab_macro_remap)
+        mremap_layout.setContentsMargins(8, 8, 8, 8)
+        mremap_layout.setSpacing(8)
+
+        mremap_row = QHBoxLayout()
+        mremap_row.addWidget(QLabel(tr("remap_macro_choose", "Choose Recorded Macro:")))
         self.remap_macro_combo = QComboBox()
         self.remap_macro_combo.currentIndexChanged.connect(self.on_macro_combo_changed)
-        v_macro.addWidget(self.remap_macro_combo)
+        mremap_row.addWidget(self.remap_macro_combo)
+        mremap_row.addStretch()
+        mremap_layout.addLayout(mremap_row)
 
         self.lbl_macro_details = QLabel("")
         self.lbl_macro_details.setStyleSheet("color: #7dcfff; font-size: 11px;")
-        v_macro.addWidget(self.lbl_macro_details)
-        v_macro.addStretch()
-        self.remap_category_tabs.addTab(tab_macro, "📜 Makro")
+        mremap_layout.addWidget(self.lbl_macro_details)
+        mremap_layout.addStretch()
+        self.remap_category_tabs.addTab(tab_macro_remap, tr("remap_cat_macros", "📜 Macros"))
 
         assign_vbox.addWidget(self.remap_category_tabs)
 
-        # Action confirmation buttons
-        btn_box = QHBoxLayout()
-        self.btn_assign_action = QPushButton("✅ Przypisz wybraną funkcję do elementu")
+        # Action Execution Buttons
+        btn_action_box = QHBoxLayout()
+        self.btn_assign_action = QPushButton(tr("remap_btn_assign", "⚡ Assign Function to Key / Knob"))
         self.btn_assign_action.setObjectName("primaryBtn")
-        self.btn_assign_action.setFixedHeight(36)
+        self.btn_assign_action.setStyleSheet("padding: 8px 16px; font-size: 12px; font-weight: bold;")
         self.btn_assign_action.clicked.connect(self.assign_selected_remap_action)
-        btn_box.addWidget(self.btn_assign_action)
+        btn_action_box.addWidget(self.btn_assign_action)
 
-        btn_reset_key = QPushButton("🗑️ Przywróć domyślny")
-        btn_reset_key.setFixedHeight(36)
-        btn_reset_key.clicked.connect(self.reset_selected_key_remap)
-        btn_box.addWidget(btn_reset_key)
-        assign_vbox.addLayout(btn_box)
+        self.btn_reset_single_key = QPushButton(tr("remap_btn_reset_key", "↩️ Reset Key to Default"))
+        self.btn_reset_single_key.setStyleSheet("padding: 8px 14px; font-weight: bold;")
+        self.btn_reset_single_key.clicked.connect(self.reset_selected_key_remap)
+        btn_action_box.addWidget(self.btn_reset_single_key)
+        assign_vbox.addLayout(btn_action_box)
 
         splitter.addWidget(assign_card)
 
-        # Right: Remap Table
+        # Right Card: Remap Summary Table for Active Layer
         table_card = QFrame()
         table_card.setObjectName("cardFrame")
         table_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         table_vbox = QVBoxLayout(table_card)
-        table_vbox.setContentsMargins(8, 8, 8, 8)
+        table_vbox.setContentsMargins(10, 10, 10, 10)
+        table_vbox.setSpacing(6)
 
-        table_vbox.addWidget(QLabel("Zmodyfikowane klawisze i pokrętła na aktywnej warstwie:"))
+        table_header = QHBoxLayout()
+        self.lbl_remap_table_title = QLabel(tr("remap_table_title", layer="Layer1"))
+        self.lbl_remap_table_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #7aa2f7;")
+        table_header.addWidget(self.lbl_remap_table_title)
+        table_header.addStretch()
+
+        self.btn_clear_layer_bottom = QPushButton(tr("remap_btn_clear_layer", "🗑️ Clear Layer"))
+        self.btn_clear_layer_bottom.setObjectName("dangerBtn")
+        self.btn_clear_layer_bottom.setStyleSheet("min-height: 22px; padding: 4px 8px; font-size: 11px;")
+        self.btn_clear_layer_bottom.clicked.connect(self.clear_current_layer_remaps)
+        table_header.addWidget(self.btn_clear_layer_bottom)
+        table_vbox.addLayout(table_header)
+
         self.remap_table = QTableWidget()
-        self.remap_table.setMinimumHeight(200)
-        self.remap_table.setColumnCount(3)
-        self.remap_table.setHorizontalHeaderLabels(["Źródło / Klawisz / Knob", "Przypisana Akcja / Makro", "Akcja"])
+        self.remap_table.setColumnCount(4)
+        self.remap_table.setHorizontalHeaderLabels([
+            tr("remap_col_key", "Key / Knob"),
+            tr("remap_col_action", "Assigned Function"),
+            tr("remap_col_code", "Hardware Code"),
+            tr("remap_col_delete", "Action")
+        ])
         self.remap_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.remap_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.remap_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.remap_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.remap_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.remap_table.setSelectionMode(QTableWidget.SingleSelection)
         table_vbox.addWidget(self.remap_table)
 
         splitter.addWidget(table_card)
-        splitter.setSizes([500, 500])
+        splitter.setSizes([620, 380])
         layout.addWidget(splitter)
 
         scroll_area.setWidget(container)
@@ -1699,132 +1848,156 @@ class MainWindow(QMainWindow):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         container = QWidget()
-        container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
         splitter = QSplitter(Qt.Horizontal)
 
-        # Left: Macro List
+        # Left Column: Macro list & management
         left_card = QFrame()
         left_card.setObjectName("cardFrame")
-        left_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        left_vbox = QVBoxLayout(left_card)
-        left_vbox.setContentsMargins(8, 8, 8, 8)
+        left_layout = QVBoxLayout(left_card)
+        left_layout.setContentsMargins(10, 10, 10, 10)
+        left_layout.setSpacing(8)
 
-        left_vbox.addWidget(QLabel("⚡ Twoje Makra"))
+        self.macro_lib_group = QGroupBox(tr("macro_library_title", "📜 Macro Library"))
+        lib_box = QVBoxLayout(self.macro_lib_group)
         self.macro_list_widget = QListWidget()
         self.macro_list_widget.currentItemChanged.connect(self.on_macro_selected)
-        left_vbox.addWidget(self.macro_list_widget)
+        lib_box.addWidget(self.macro_list_widget)
 
-        macro_btn_row = QHBoxLayout()
-        btn_new_macro = QPushButton("➕ Nowe")
-        btn_new_macro.clicked.connect(self.create_new_macro)
-        macro_btn_row.addWidget(btn_new_macro)
+        btn_row = QHBoxLayout()
+        self.btn_new_macro = QPushButton(tr("macro_btn_new", "➕ New Macro"))
+        self.btn_new_macro.setObjectName("primaryBtn")
+        self.btn_new_macro.clicked.connect(self.create_new_macro)
+        btn_row.addWidget(self.btn_new_macro)
 
-        btn_dup_macro = QPushButton("📋 Duplikuj")
-        btn_dup_macro.clicked.connect(self.duplicate_current_macro)
-        macro_btn_row.addWidget(btn_dup_macro)
+        self.btn_del_macro = QPushButton(tr("macro_btn_delete", "🗑️ Delete"))
+        self.btn_del_macro.setObjectName("dangerBtn")
+        self.btn_del_macro.clicked.connect(self.delete_current_macro)
+        btn_row.addWidget(self.btn_del_macro)
 
-        btn_del_macro = QPushButton("🗑️ Usuń")
-        btn_del_macro.setObjectName("dangerBtn")
-        btn_del_macro.clicked.connect(self.delete_current_macro)
-        macro_btn_row.addWidget(btn_del_macro)
-        left_vbox.addLayout(macro_btn_row)
+        self.btn_dup_macro = QPushButton(tr("macro_btn_dup", "📋 Duplicate"))
+        self.btn_dup_macro.clicked.connect(self.duplicate_current_macro)
+        btn_row.addWidget(self.btn_dup_macro)
 
+        self.btn_rename_macro = QPushButton(tr("macro_btn_rename", "✏️ Rename"))
+        self.btn_rename_macro.clicked.connect(self.rename_current_macro)
+        btn_row.addWidget(self.btn_rename_macro)
+
+        lib_box.addLayout(btn_row)
+        left_layout.addWidget(self.macro_lib_group)
         splitter.addWidget(left_card)
 
-        # Right: Macro Editor
+        # Right Column: Macro Editor
         right_card = QFrame()
         right_card.setObjectName("cardFrame")
-        right_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        right_vbox = QVBoxLayout(right_card)
-        right_vbox.setContentsMargins(10, 10, 10, 10)
-        right_vbox.setSpacing(8)
+        right_layout = QVBoxLayout(right_card)
+        right_layout.setContentsMargins(10, 10, 10, 10)
+        right_layout.setSpacing(8)
 
-        right_vbox.addWidget(QLabel("Edycja Makra:"))
+        self.macro_editor_group = QGroupBox(tr("macro_editor_title", "⚡ Macro Sequence Editor"))
+        editor_box = QVBoxLayout(self.macro_editor_group)
 
-        # Macro Properties Form
-        props_grid = QGridLayout()
-
-        props_grid.addWidget(QLabel("Nazwa makra:"), 0, 0)
+        # Macro Properties Bar
+        prop_row = QHBoxLayout()
+        self.lbl_macro_name = QLabel(tr("macro_name_label", "Macro Name:"))
+        prop_row.addWidget(self.lbl_macro_name)
         self.macro_name_input = QLineEdit()
         self.macro_name_input.textChanged.connect(self.on_macro_properties_changed)
-        props_grid.addWidget(self.macro_name_input, 0, 1)
+        prop_row.addWidget(self.macro_name_input)
 
-        props_grid.addWidget(QLabel("Domyślne opóźnienie (ms):"), 0, 2)
-        self.macro_delay_spin = QSpinBox()
-        self.macro_delay_spin.setRange(0, 10000)
-        self.macro_delay_spin.setValue(0)
-        self.macro_delay_spin.valueChanged.connect(self.on_macro_properties_changed)
-        props_grid.addWidget(self.macro_delay_spin, 0, 3)
-
-        props_grid.addWidget(QLabel("Tryb powtarzania:"), 1, 0)
+        self.lbl_macro_repeat = QLabel(tr("macro_repeat_label", "Repeat Mode:"))
+        prop_row.addWidget(self.lbl_macro_repeat)
         self.macro_repeat_combo = QComboBox()
-        self.macro_repeat_combo.addItem("Wykonaj określoną liczbę razy", "RepeatXTimes")
-        self.macro_repeat_combo.addItem("Powtarzaj przy trzymaniu klawisza", "ReleaseKeyToStop")
-        self.macro_repeat_combo.addItem("Włącz / Wyłącz ponownym kliknięciem (Toggle)", "PressKeyAgainToStop")
+        self.macro_repeat_combo.addItem(tr("macro_mode_times", "Repeat X Times"), "RepeatXTimes")
+        self.macro_repeat_combo.addItem(tr("macro_mode_hold", "Hold Key to Repeat"), "ReleaseKeyToStop")
+        self.macro_repeat_combo.addItem(tr("macro_mode_toggle", "Toggle On/Off on Press"), "PressKeyAgainToStop")
         self.macro_repeat_combo.currentIndexChanged.connect(self.on_macro_properties_changed)
-        props_grid.addWidget(self.macro_repeat_combo, 1, 1)
+        prop_row.addWidget(self.macro_repeat_combo)
 
-        props_grid.addWidget(QLabel("Liczba powtórzeń:"), 1, 2)
+        self.lbl_macro_repeat_count = QLabel(tr("macro_repeat_count", "Repeats:"))
+        prop_row.addWidget(self.lbl_macro_repeat_count)
         self.macro_repeat_count_spin = QSpinBox()
-        self.macro_repeat_count_spin.setRange(1, 255)
+        self.macro_repeat_count_spin.setRange(1, 9999)
         self.macro_repeat_count_spin.setValue(1)
         self.macro_repeat_count_spin.valueChanged.connect(self.on_macro_properties_changed)
-        props_grid.addWidget(self.macro_repeat_count_spin, 1, 3)
+        prop_row.addWidget(self.macro_repeat_count_spin)
 
-        right_vbox.addLayout(props_grid)
+        editor_box.addLayout(prop_row)
 
-        # Macro Actions Table
-        right_vbox.addWidget(QLabel("Sekwencja akcji makra (Kroki):"))
+        # Macro Steps Table
         self.macro_actions_table = QTableWidget()
-        self.macro_actions_table.setMinimumHeight(240)
         self.macro_actions_table.setColumnCount(4)
-        self.macro_actions_table.setHorizontalHeaderLabels(["Typ Akcji", "Klawisz / Znak", "Opóźnienie (ms)", "Opcje"])
+        self.macro_actions_table.setHorizontalHeaderLabels([
+            tr("macro_table_col_event", "Event"),
+            tr("macro_table_col_key", "Target Key"),
+            tr("macro_table_col_delay", "Delay (ms)"),
+            "Action"
+        ])
         self.macro_actions_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.macro_actions_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.macro_actions_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.macro_actions_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        right_vbox.addWidget(self.macro_actions_table)
+        editor_box.addWidget(self.macro_actions_table)
 
-        # Step adder toolbar
-        add_step_box = QHBoxLayout()
+        # Step adder row
+        step_add_row = QHBoxLayout()
         self.action_type_combo = QComboBox()
-        self.action_type_combo.addItems(["Press (Naciśnij i puść)", "Down (Wciśnij)", "Up (Puść)"])
-        add_step_box.addWidget(self.action_type_combo)
+        self.action_type_combo.addItems(["Press (Down + Up)", "Down (Keydown)", "Up (Keyup)"])
+        step_add_row.addWidget(self.action_type_combo)
 
         self.action_key_combo = QComboBox()
-        for cat_name, keys in TARGET_KEY_CATEGORIES.items():
-            for kid, klabel in keys:
-                self.action_key_combo.addItem(f"{kid} ({klabel})", kid)
-        add_step_box.addWidget(self.action_key_combo)
+        for k in KEY_DEFINITIONS:
+            self.action_key_combo.addItem(f"{k['label']} [{k['id']}]", k["id"])
+        step_add_row.addWidget(self.action_key_combo)
 
-        add_step_box.addWidget(QLabel("Opóźnienie (ms):"))
+        step_add_row.addWidget(QLabel("Delay (ms):"))
         self.action_delay_spin = QSpinBox()
-        self.action_delay_spin.setRange(0, 5000)
+        self.action_delay_spin.setRange(1, 10000)
         self.action_delay_spin.setValue(20)
-        add_step_box.addWidget(self.action_delay_spin)
+        step_add_row.addWidget(self.action_delay_spin)
 
-        btn_add_step = QPushButton("➕ Dodaj krok")
-        btn_add_step.clicked.connect(self.add_macro_step)
-        add_step_box.addWidget(btn_add_step)
-        right_vbox.addLayout(add_step_box)
+        self.btn_add_macro_step = QPushButton(tr("macro_btn_add_step", "➕ Add Step"))
+        self.btn_add_macro_step.setObjectName("primaryBtn")
+        self.btn_add_macro_step.clicked.connect(self.add_macro_step)
+        step_add_row.addWidget(self.btn_add_macro_step)
 
-        # Quick Text to Macro Generator
-        quick_text_group = QGroupBox("🚀 Szybki generator tekstu do makra")
-        quick_text_vbox = QVBoxLayout(quick_text_group)
-        quick_text_row = QHBoxLayout()
+        self.btn_clear_macro_steps = QPushButton(tr("macro_btn_clear_steps", "🧹 Clear All Steps"))
+        self.btn_clear_macro_steps.clicked.connect(self.clear_all_macro_steps)
+        step_add_row.addWidget(self.btn_clear_macro_steps)
+
+        editor_box.addLayout(step_add_row)
+        right_layout.addWidget(self.macro_editor_group)
+
+        # Quick Text / Command to Macro Generator
+        self.text_macro_group = QGroupBox(tr("macro_quick_text_title", "⚡ Quick Text / Command to Macro Generator"))
+        text_box = QVBoxLayout(self.text_macro_group)
+
+        self.lbl_quick_text_hint = QLabel(tr("macro_quick_text_label", "Enter text or shell command to convert (e.g. sudo pacman -Syu):"))
+        self.lbl_quick_text_hint.setStyleSheet("font-size: 11px; color: #a9b1d6;")
+        text_box.addWidget(self.lbl_quick_text_hint)
+
+        text_row = QHBoxLayout()
         self.quick_text_input = QLineEdit()
-        self.quick_text_input.setPlaceholderText("Wpisz tekst (np. login, komendę, ciąg znaków)...")
-        quick_text_row.addWidget(self.quick_text_input)
+        self.quick_text_input.setPlaceholderText("sudo pacman -Syu")
+        text_row.addWidget(self.quick_text_input)
 
-        btn_gen_text = QPushButton("Konwertuj na sekwencję")
-        btn_gen_text.clicked.connect(self.generate_macro_from_text)
-        quick_text_row.addWidget(btn_gen_text)
-        quick_text_vbox.addLayout(quick_text_row)
-        right_vbox.addWidget(quick_text_group)
+        self.lbl_quick_text_speed = QLabel(tr("macro_quick_text_speed", "Speed (ms/key):"))
+        text_row.addWidget(self.lbl_quick_text_speed)
+        self.quick_text_delay_spin = QSpinBox()
+        self.quick_text_delay_spin.setRange(5, 500)
+        self.quick_text_delay_spin.setValue(25)
+        text_row.addWidget(self.quick_text_delay_spin)
+
+        self.btn_generate_text_macro = QPushButton(tr("macro_quick_text_btn", "🚀 Generate Key Sequence"))
+        self.btn_generate_text_macro.setObjectName("primaryBtn")
+        self.btn_generate_text_macro.clicked.connect(self.generate_macro_from_text)
+        text_row.addWidget(self.btn_generate_text_macro)
+        text_box.addLayout(text_row)
+
+        right_layout.addWidget(self.text_macro_group)
 
         splitter.addWidget(right_card)
         splitter.setSizes([350, 650])
@@ -1834,7 +2007,7 @@ class MainWindow(QMainWindow):
         return scroll_area
 
     # =========================================================================
-    # TAB 4: DEBUG & DIAGNOSTICS
+    # TAB 4: CODE PREVIEW & DIAGNOSTICS
     # =========================================================================
     def create_debug_tab(self) -> QWidget:
         scroll_area = QScrollArea()
@@ -1844,220 +2017,218 @@ class MainWindow(QMainWindow):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         container = QWidget()
-        container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
-        # 1. Profile & File Persistence Management Card
-        prof_card = QFrame()
-        prof_card.setObjectName("cardFrame")
-        prof_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        prof_vbox = QVBoxLayout(prof_card)
-        prof_vbox.setContentsMargins(12, 12, 12, 12)
-        prof_vbox.setSpacing(8)
+        # Code preview box
+        code_card = QFrame()
+        code_card.setObjectName("cardFrame")
+        code_layout = QVBoxLayout(code_card)
 
-        lbl_prof_title = QLabel("💾 Zarządzanie Plikami Konfiguracji & Kopia Zapasowa (Profiles)")
-        lbl_prof_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #7aa2f7;")
-        prof_vbox.addWidget(lbl_prof_title)
+        code_header = QHBoxLayout()
+        self.lbl_debug_code_title = QLabel(tr("debug_code_title", "Generated GK6X UserData Configuration Code"))
+        self.lbl_debug_code_title.setStyleSheet("font-weight: bold; color: #7aa2f7;")
+        code_header.addWidget(self.lbl_debug_code_title)
+        code_header.addStretch()
 
-        lbl_prof_desc = QLabel(
-            "Zapisuj całe układy do plików na dysku, twórz kopie zapasowe, przenoś profile między komputerami "
-            "oraz wgrywaj przygotowane pliki konfiguracyjne (.json / .txt) bezpośrednio do pamięci mikrokontrolera."
-        )
-        lbl_prof_desc.setWordWrap(True)
-        lbl_prof_desc.setStyleSheet("color: #a9b1d6; font-size: 11px;")
-        prof_vbox.addWidget(lbl_prof_desc)
+        self.btn_refresh_code = QPushButton(tr("debug_btn_refresh", "🔄 Refresh Code"))
+        self.btn_refresh_code.clicked.connect(self.refresh_debug_code_view)
+        code_header.addWidget(self.btn_refresh_code)
 
-        btn_prof_row = QHBoxLayout()
-        btn_prof_row.setSpacing(8)
+        self.btn_copy_code = QPushButton(tr("debug_btn_copy", "📋 Copy to Clipboard"))
+        self.btn_copy_code.clicked.connect(self.copy_debug_code_to_clipboard)
+        code_header.addWidget(self.btn_copy_code)
 
-        btn_mgr = QPushButton("📋 Otwórz Menedżer Profili...")
-        btn_mgr.setObjectName("primaryBtn")
-        btn_mgr.setStyleSheet("min-height: 26px; padding: 6px 14px;")
-        btn_mgr.clicked.connect(self.open_profile_manager)
-        btn_prof_row.addWidget(btn_mgr)
+        self.btn_export_code = QPushButton(tr("debug_btn_export", "💾 Export to .txt"))
+        self.btn_export_code.clicked.connect(self.export_raw_config_dialog)
+        code_header.addWidget(self.btn_export_code)
+        code_layout.addLayout(code_header)
 
-        btn_save_json = QPushButton("💾 Zapisz profil (.json)...")
-        btn_save_json.setStyleSheet("min-height: 26px; padding: 6px 12px;")
-        btn_save_json.clicked.connect(lambda: self.save_profile_dialog(default_type="json"))
-        btn_prof_row.addWidget(btn_save_json)
+        self.debug_code_edit = QPlainTextEdit()
+        self.debug_code_edit.setReadOnly(True)
+        self.debug_code_edit.setStyleSheet("font-family: monospace; font-size: 11px; background-color: #13141c; color: #9ece6a; border: 1px solid #24283b; border-radius: 6px;")
+        code_layout.addWidget(self.debug_code_edit)
+        layout.addWidget(code_card)
 
-        btn_save_txt = QPushButton("📄 Zapisz kod sprzętowy (.txt)...")
-        btn_save_txt.setStyleSheet("min-height: 26px; padding: 6px 12px;")
-        btn_save_txt.clicked.connect(self.export_raw_config_dialog)
-        btn_prof_row.addWidget(btn_save_txt)
+        # Execution log box
+        log_card = QFrame()
+        log_card.setObjectName("cardFrame")
+        log_layout = QVBoxLayout(log_card)
 
-        btn_load_file = QPushButton("📂 Wczytaj plik (.json / .txt)...")
-        btn_load_file.setStyleSheet("min-height: 26px; padding: 6px 12px;")
-        btn_load_file.clicked.connect(lambda: self.load_profile_dialog(auto_apply=False))
-        btn_prof_row.addWidget(btn_load_file)
+        log_header = QHBoxLayout()
+        self.lbl_debug_log_title = QLabel(tr("debug_log_title", "Backend Execution & Communication Log"))
+        self.lbl_debug_log_title.setStyleSheet("font-weight: bold; color: #7aa2f7;")
+        log_header.addWidget(self.lbl_debug_log_title)
+        log_header.addStretch()
 
-        btn_flash_file = QPushButton("⚡ Wgraj plik do klawiatury...")
-        btn_flash_file.setObjectName("successBtn")
-        btn_flash_file.setStyleSheet("min-height: 26px; padding: 6px 12px;")
-        btn_flash_file.clicked.connect(lambda: self.load_profile_dialog(auto_apply=True))
-        btn_prof_row.addWidget(btn_flash_file)
+        self.btn_clear_log = QPushButton(tr("debug_btn_clear_log", "🧹 Clear Log"))
+        self.btn_clear_log.clicked.connect(lambda: self.debug_log_edit.clear())
+        log_header.addWidget(self.btn_clear_log)
 
-        btn_prof_row.addStretch()
-        prof_vbox.addLayout(btn_prof_row)
-        layout.addWidget(prof_card)
+        self.btn_check_bridge = QPushButton(tr("debug_bridge_status", "⚙️ Hardware Bridge Status"))
+        self.btn_check_bridge.clicked.connect(self.open_components_dialog)
+        log_header.addWidget(self.btn_check_bridge)
+        log_layout.addLayout(log_header)
 
-        # 2. Hardware UserData Preview Card
-        card = QFrame()
-        card.setObjectName("cardFrame")
-        card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        card_vbox = QVBoxLayout(card)
-        card_vbox.setContentsMargins(12, 12, 12, 12)
-        card_vbox.setSpacing(8)
+        self.debug_log_edit = QTextEdit()
+        self.debug_log_edit.setReadOnly(True)
+        self.debug_log_edit.setStyleSheet("font-family: monospace; font-size: 11px; background-color: #13141c; color: #c0caf5; border: 1px solid #24283b; border-radius: 6px;")
+        log_layout.addWidget(self.debug_log_edit)
+        layout.addWidget(log_card)
 
-        card_vbox.addWidget(QLabel("📝 Podgląd generowanego pliku konfiguracji sprzętowej GK6X UserData:"))
-
-        self.debug_code_text = QPlainTextEdit()
-        self.debug_code_text.setReadOnly(True)
-        self.debug_code_text.setMinimumHeight(320)
-        self.debug_code_text.setStyleSheet("font-family: monospace; font-size: 11px; background-color: #13141c; color: #a9b1d6;")
-        card_vbox.addWidget(self.debug_code_text)
-
-        btn_row = QHBoxLayout()
-        btn_refresh_code = QPushButton("🔄 Odśwież podgląd kodu")
-        btn_refresh_code.clicked.connect(self.refresh_debug_code_view)
-        btn_row.addWidget(btn_refresh_code)
-
-        btn_apply_from_preview = QPushButton("⚡ Wgraj tę konfigurację do klawiatury")
-        btn_apply_from_preview.setObjectName("primaryBtn")
-        btn_apply_from_preview.clicked.connect(self.apply_full_configuration)
-        btn_row.addWidget(btn_apply_from_preview)
-
-        btn_row.addStretch()
-        card_vbox.addLayout(btn_row)
-
-        layout.addWidget(card)
         scroll_area.setWidget(container)
         return scroll_area
 
     # =========================================================================
-    # SIGNALS & CONNECTORS
+    # SYSTEM TRAY & POWER MONITOR
     # =========================================================================
+    def init_system_tray(self):
+        if not hasattr(self, "tray_icon") or self.tray_icon is None:
+            self.tray_icon = QSystemTrayIcon(self)
+            pix = QPixmap(32, 32)
+            pix.fill(Qt.transparent)
+            painter = QPainter(pix)
+            painter.setBrush(QBrush(QColor("#7aa2f7")))
+            painter.setPen(QPen(QColor("#1a1b26"), 2))
+            painter.drawRoundedRect(2, 2, 28, 28, 6, 6)
+            painter.setPen(QPen(QColor("#15161e"), 2))
+            painter.drawText(pix.rect(), Qt.AlignCenter, "GK")
+            painter.end()
+            self.tray_icon.setIcon(QIcon(pix))
+            self.tray_icon.setToolTip(tr("app_window_title", "Skyloong GK104 Pro Studio"))
+
+        tray_menu = QMenu()
+        tray_menu.setStyleSheet("background-color: #1f2335; color: #c0caf5; border: 1px solid #414868; padding: 4px;")
+
+        title_act = tray_menu.addAction("⌨️ Skyloong GK104 Pro Studio")
+        title_act.setEnabled(False)
+        tray_menu.addSeparator()
+
+        show_act = tray_menu.addAction(tr("tray_show", "🖥️ Show Window"))
+        show_act.triggered.connect(self.showNormal)
+
+        hide_act = tray_menu.addAction(tr("tray_hide", "⬇️ Minimize to Tray"))
+        hide_act.triggered.connect(self.hide)
+
+        tray_menu.addSeparator()
+
+        # Brightness Submenu
+        bright_menu = tray_menu.addMenu(tr("tray_brightness", "💡 Backlight Brightness"))
+        for b in [100, 75, 50, 25, 0]:
+            lbl = f"{b}%" if b > 0 else "Off (0%)"
+            act_b = bright_menu.addAction(lbl)
+            act_b.triggered.connect(lambda _, val=b: self.set_brightness_level(val))
+
+        # Color Presets Submenu
+        preset_menu = tray_menu.addMenu(tr("tray_effects", "🌈 Lighting Presets"))
+        for pname in COLOR_PRESETS.keys():
+            act_p = preset_menu.addAction(pname)
+            act_p.triggered.connect(lambda _, pn=pname: self.apply_preset_theme(pn))
+
+        # Layer Switcher Submenu
+        layer_menu = tray_menu.addMenu(tr("tray_layers", "🔀 Active Layer"))
+        for lid, lname in get_available_layers():
+            act_l = layer_menu.addAction(lname)
+            act_l.triggered.connect(lambda _, l=lid: self.switch_remap_layer(l))
+
+        # Language Switcher Submenu
+        lang_sub = tray_menu.addMenu(tr("tray_lang", "🌐 Language"))
+        for lcode, lname in get_available_languages():
+            act_lang = lang_sub.addAction(lname)
+            act_lang.triggered.connect(lambda _, c=lcode: self.switch_language_direct(c))
+
+        tray_menu.addSeparator()
+
+        flash_act = tray_menu.addAction(tr("tray_apply", "⚡ Flash to Keyboard"))
+        flash_act.triggered.connect(self.apply_full_configuration)
+
+        tray_menu.addSeparator()
+
+        # Battery / Power status in tray
+        p_info = get_system_battery_info()
+        p_status = p_info.get("status_string", "Power: AC")
+        power_act = tray_menu.addAction(f"⚡ {p_status}")
+        power_act.setEnabled(False)
+
+        tray_menu.addSeparator()
+
+        quit_act = tray_menu.addAction(tr("tray_quit", "❌ Quit"))
+        quit_act.triggered.connect(QApplication.instance().quit)
+
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.show()
+
+    def switch_language_direct(self, lang_code: str):
+        set_current_language(lang_code)
+        for i in range(self.lang_combo.count()):
+            if self.lang_combo.itemData(i) == lang_code:
+                self.lang_combo.blockSignals(True)
+                self.lang_combo.setCurrentIndex(i)
+                self.lang_combo.blockSignals(False)
+                break
+        self.retranslate_ui()
+
     def connect_signals(self):
-        self.backend.device_status_signal.connect(self.on_device_status)
         self.backend.apply_finished.connect(self.on_apply_finished)
         self.backend.unmap_finished.connect(self.on_unmap_finished)
+        self.backend.log_message.connect(self.on_backend_log)
+
+    def check_startup_components(self):
+        diag = SystemChecker.get_full_diagnostics()
+        if not diag["all_ok"]:
+            dlg = ComponentInstallerDialog(self, auto_prompt_install=True)
+            dlg.exec()
 
     def open_components_dialog(self):
         dlg = ComponentInstallerDialog(self)
         dlg.exec()
 
-    def check_startup_components(self):
-        diag = SystemChecker.get_full_diagnostics()
-        if not diag["all_ok"]:
-            items_str = "\n".join([f"• {item}" for item in diag["missing_items"]])
-            reply = QMessageBox.question(
-                self,
-                "⚙️ Wymagane komponenty systemowe",
-                f"Wykryto brakujące komponenty lub uprawnienia do pełnej obsługi klawiatury:\n\n{items_str}\n\n"
-                "Czy chcesz otworzyć asystenta instalacji i skonfigurować je automatycznie?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes
-            )
-            if reply == QMessageBox.Yes:
-                self.open_components_dialog()
+    def open_profile_manager(self):
+        dlg = ProfileManagerDialog(self.backend, main_window=self, parent=self)
+        dlg.exec()
+
+    def on_backend_log(self, msg: str):
+        self.debug_log_edit.append(msg)
 
     def refresh_device(self):
-        self.device_status_lbl.setText("Sprawdzanie połączenia USB...")
-        self.device_status_lbl.setStyleSheet("color: #7aa2f7; font-size: 12px;")
-        QApplication.processEvents()
-        self.backend.detect_device()
-
-    def on_device_status(self, is_connected: bool, model_id: str, model_name: str):
-        if is_connected:
-            if getattr(self.backend, "has_permission_issue", False):
-                self.device_status_lbl.setText(f"🟡 Wykryto: {model_name} [Brak uprawnień Udev — kliknij ⚙️]")
-                self.device_status_lbl.setStyleSheet("color: #e0af68; font-weight: bold; font-size: 12px;")
-            else:
-                self.device_status_lbl.setText(f"🟢 Połączono: {model_name} (ID: {model_id})")
-                self.device_status_lbl.setStyleSheet("color: #9ece6a; font-weight: bold; font-size: 12px;")
-        else:
-            self.device_status_lbl.setText(f"🔴 Rozłączono / Brak urządzenia (ID: {model_id}) — Sprawdź ⚙️")
-            self.device_status_lbl.setStyleSheet("color: #f7768e; font-weight: bold; font-size: 12px;")
-
-    def on_space_mode_toggled(self):
-        sender = self.sender()
-        if sender in [self.rgb_radio_single_space, self.remap_radio_single_space]:
-            if not sender.isChecked():
-                return
-            new_mode = "standard"
-        elif sender in [self.rgb_radio_split_space, self.remap_radio_split_space]:
-            if not sender.isChecked():
-                return
-            new_mode = "split"
-        else:
-            return
-
-        if new_mode != self.space_mode:
-            self.space_mode = new_mode
-            self.backend.space_mode = new_mode
-
-            # Synchronize radio buttons without recursion
-            self.rgb_radio_split_space.blockSignals(True)
-            self.rgb_radio_single_space.blockSignals(True)
-            self.remap_radio_split_space.blockSignals(True)
-            self.remap_radio_single_space.blockSignals(True)
-
-            self.rgb_radio_split_space.setChecked(new_mode == "split")
-            self.rgb_radio_single_space.setChecked(new_mode == "standard")
-            self.remap_radio_split_space.setChecked(new_mode == "split")
-            self.remap_radio_single_space.setChecked(new_mode == "standard")
-
-            self.rgb_radio_split_space.blockSignals(False)
-            self.rgb_radio_single_space.blockSignals(False)
-            self.remap_radio_split_space.blockSignals(False)
-            self.remap_radio_single_space.blockSignals(False)
-
-            # Rebuild keyboard grids
-            self.build_keyboard_grid(
-                self.rgb_grid_layout,
-                self.rgb_key_buttons,
-                self.on_rgb_key_clicked,
-                self.space_mode,
-                mode="rgb"
+        info = self.backend.get_device_status_info()
+        if info["connected"]:
+            self.device_status_lbl.setText(
+                tr("device_connected", name=info["device_name"], vid=info["vid"], pid=info["pid"])
             )
-            self.live_anim.buttons = self.rgb_key_buttons
+            self.device_status_lbl.setStyleSheet("color: #9ece6a; font-weight: bold; font-size: 11px;")
+        else:
+            self.device_status_lbl.setText(tr("device_virtual", "Virtual Mode / No hardware detected"))
+            self.device_status_lbl.setStyleSheet("color: #e0af68; font-weight: bold; font-size: 11px;")
 
-            self.build_keyboard_grid(
-                self.remap_grid_layout,
-                self.remap_key_buttons,
-                self.on_remap_key_selected,
-                self.space_mode,
-                mode="remap"
-            )
-
-            # Update selected key if necessary
-            if self.space_mode == "split" and self.selected_remap_key == "Space_18":
-                self.selected_remap_key = "LeftSpace"
-            elif self.space_mode == "standard" and self.selected_remap_key in ["LeftSpace", "RightSpace"]:
-                self.selected_remap_key = "Space_18"
-
-            self.refresh_remap_ui()
-            self.backend.save_profile()
+        # Update Battery status
+        bat_info = get_system_battery_info()
+        if bat_info.get("has_battery") and bat_info.get("percentage") is not None:
+            pct = bat_info["percentage"]
+            st = bat_info.get("state", "Discharging")
+            self.lbl_battery_header.setText(tr("battery_val", val=pct, status=st))
+            self.lbl_battery_header.setStyleSheet("color: #7dcfff; font-size: 11px; font-weight: bold; background-color: #13141c; padding: 6px 10px; border-radius: 6px; border: 1px solid #24283b;")
+        else:
+            self.lbl_battery_header.setText(tr("battery_ac", "🔋 Power: AC Connected (100%)"))
 
     def reset_factory_mappings(self):
         reply = QMessageBox.question(
             self,
-            "Potwierdzenie resetu",
-            "Czy na pewno chcesz przywrócić fabryczne mapowanie klawiszy (Unmap)?",
+            tr("btn_reset", "Reset"),
+            tr("msg_reset_confirm", "Are you sure you want to restore default factory mappings?"),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         if reply == QMessageBox.Yes:
             self.progress_bar.setVisible(True)
-            self.lbl_bottom_info.setText("Resetowanie mapowań w klawiaturze...")
+            self.lbl_bottom_info.setText(tr("lbl_status_resetting", "Resetting keyboard mappings..."))
             self.backend.reset_keyboard_mapping()
 
     def apply_full_configuration(self):
         self.progress_bar.setVisible(True)
         self.btn_apply_all.setEnabled(False)
-        self.lbl_bottom_info.setText("Programowanie pamięci klawiatury (Flash)...")
+        self.lbl_bottom_info.setText(tr("lbl_status_flashing", "Flashing keyboard memory (Flash)..."))
         self.backend.apply_current_configuration()
 
     def on_apply_finished(self, success: bool, msg: str):
@@ -2065,18 +2236,18 @@ class MainWindow(QMainWindow):
         self.btn_apply_all.setEnabled(True)
         self.lbl_bottom_info.setText(msg)
         if success:
-            QMessageBox.information(self, "Sukces", msg)
+            QMessageBox.information(self, tr("msg_success", "Success"), tr("msg_flashed_success"))
         else:
-            QMessageBox.warning(self, "Błąd wgrywania", msg)
+            QMessageBox.warning(self, tr("msg_error", "Error"), tr("msg_flashed_error", err=msg))
 
     def on_unmap_finished(self, success: bool, msg: str):
         self.progress_bar.setVisible(False)
         self.lbl_bottom_info.setText(msg)
         self.refresh_remap_ui()
         if success:
-            QMessageBox.information(self, "Reset Mapowania", msg)
+            QMessageBox.information(self, tr("btn_reset", "Reset"), msg)
         else:
-            QMessageBox.warning(self, "Błąd", msg)
+            QMessageBox.warning(self, tr("msg_error", "Error"), msg)
 
     def on_tab_changed(self, index: int):
         if index == 1:
@@ -2093,7 +2264,7 @@ class MainWindow(QMainWindow):
         self.all_effects = self.backend.get_available_effects()
         categories = sorted(list(set(e["category"] for e in self.all_effects)))
         self.category_combo.clear()
-        self.category_combo.addItem("Wszystkie kategorie")
+        self.category_combo.addItem(tr("rgb_all_categories", "All Categories"))
         for cat in categories:
             self.category_combo.addItem(cat)
         self.filter_effects()
@@ -2101,10 +2272,11 @@ class MainWindow(QMainWindow):
     def filter_effects(self):
         query = self.effect_search_input.text().lower()
         selected_cat = self.category_combo.currentText()
+        all_cat_label = tr("rgb_all_categories", "All Categories")
         self.effects_list_widget.clear()
 
         for eff in self.all_effects:
-            if selected_cat != "Wszystkie kategorie" and eff["category"] != selected_cat:
+            if selected_cat != all_cat_label and eff["category"] != selected_cat:
                 continue
             if query and query not in eff["name"].lower():
                 continue
@@ -2118,16 +2290,19 @@ class MainWindow(QMainWindow):
             effect_name = current.data(Qt.UserRole)
             if effect_name:
                 self.live_anim.set_preset(effect_name)
-                self.rgb_chassis.update_screen_info("1.04″ SMART SCREEN", f"EFFECT: {effect_name[:12].upper()}")
+                self.rgb_chassis.update_screen_info(
+                    tr("smart_screen_title", "1.04″ SMART SCREEN"),
+                    tr("smart_screen_effect", name=effect_name[:12].upper())
+                )
 
     def toggle_live_animation(self):
         if self.live_anim.is_running:
             self.live_anim.stop()
-            self.btn_toggle_anim.setText("▶ Uruchom podgląd")
+            self.btn_toggle_anim.setText(tr("rgb_start_anim", "▶ Start Preview"))
             self.btn_toggle_anim.setStyleSheet("background-color: #1f3554; color: #7aa2f7; font-weight: bold; padding: 4px 10px;")
         else:
             self.live_anim.start()
-            self.btn_toggle_anim.setText("⏸ Wstrzymaj podgląd")
+            self.btn_toggle_anim.setText(tr("rgb_pause_anim", "⏸ Pause Preview"))
             self.btn_toggle_anim.setStyleSheet("background-color: #2b3b55; color: #7dcfff; font-weight: bold; padding: 4px 10px;")
 
     def on_anim_speed_changed(self, value: int):
@@ -2140,7 +2315,7 @@ class MainWindow(QMainWindow):
     def apply_selected_effect(self):
         item = self.effects_list_widget.currentItem()
         if not item:
-            QMessageBox.warning(self, "Wybór", "Wybierz animację z listy!")
+            QMessageBox.warning(self, tr("msg_warning", "Warning"), "Please select an effect from the list!")
             return
         effect_name = item.data(Qt.UserRole)
         layer = self.rgb_layer_combo.currentText()
@@ -2158,7 +2333,7 @@ class MainWindow(QMainWindow):
         self.backend.lighting_config["layer"] = self.rgb_layer_combo.currentText()
 
     def open_color_dialog(self):
-        col = QColorDialog.getColor(QColor(self.selected_brush_color), self, "Wybierz Kolor Pędzla")
+        col = QColorDialog.getColor(QColor(self.selected_brush_color), self, tr("rgb_color_dialog_title", "Choose Brush Color"))
         if col.isValid():
             self.set_brush_color(col.name())
 
@@ -2168,24 +2343,31 @@ class MainWindow(QMainWindow):
 
     def on_rgb_key_clicked(self, key_id: str):
         if key_id in self.rgb_key_buttons:
-            self.rgb_key_buttons[key_id].set_color(self.selected_brush_color)
             self.current_key_colors[key_id] = self.selected_brush_color
-            self.live_anim.set_static(self.current_key_colors)
+            self.rgb_key_buttons[key_id].set_color(self.selected_brush_color)
+            self.live_anim.set_static_mode(self.current_key_colors)
 
     def paint_zone(self, zone_id: str):
-        for kid, btn in self.rgb_key_buttons.items():
-            match = False
-            if zone_id == "all":
-                match = True
-            elif zone_id == btn.group:
-                match = True
-            elif zone_id == "alpha" and btn.group in ["alpha", "wasd"]:
-                match = True
+        keys_to_paint = []
+        if zone_id == "wasd":
+            keys_to_paint = ["W", "A", "S", "D"]
+        elif zone_id == "arrows":
+            keys_to_paint = ["Up", "Down", "Left", "Right"]
+        elif zone_id == "numpad":
+            keys_to_paint = [k["id"] for k in KEY_DEFINITIONS if k.get("group") == "numpad"]
+        elif zone_id == "func":
+            keys_to_paint = [f"F{i}" for i in range(1, 13)] + ["Esc"]
+        elif zone_id == "alpha":
+            keys_to_paint = [k["id"] for k in KEY_DEFINITIONS if k.get("group") in ["alpha", "wasd"]]
+        elif zone_id == "all":
+            keys_to_paint = list(self.rgb_key_buttons.keys())
 
-            if match:
-                btn.set_color(self.selected_brush_color)
-                self.current_key_colors[kid] = self.selected_brush_color
-        self.live_anim.set_static(self.current_key_colors)
+        for kid in keys_to_paint:
+            self.current_key_colors[kid] = self.selected_brush_color
+            if kid in self.rgb_key_buttons:
+                self.rgb_key_buttons[kid].set_color(self.selected_brush_color)
+
+        self.live_anim.set_static_mode(self.current_key_colors)
 
     def apply_preset_theme(self, theme_name: str):
         theme = COLOR_PRESETS.get(theme_name)
@@ -2193,197 +2375,133 @@ class MainWindow(QMainWindow):
             return
 
         for kid, btn in self.rgb_key_buttons.items():
-            color = theme.get(btn.group, theme.get("all", "#000000"))
-            btn.set_color(color)
-            self.current_key_colors[kid] = color
+            grp = getattr(btn, "group", "alpha")
+            c = theme.get(grp, theme.get("default", "#7aa2f7"))
+            self.current_key_colors[kid] = c
+            btn.set_color(c)
 
-        self.live_anim.set_static(self.current_key_colors)
-        self.rgb_chassis.update_screen_info("1.04″ SMART SCREEN", f"THEME: {theme_name[:12].upper()}")
+        self.live_anim.set_static_mode(self.current_key_colors)
+        self.rgb_chassis.update_screen_info(
+            tr("smart_screen_title", "1.04″ SMART SCREEN"),
+            f"THEME: {theme_name[:12].upper()}"
+        )
+
+    def on_brightness_slider_changed(self, value: int):
+        self.lbl_brightness_val.setText(tr("rgb_brightness_label", val=value))
+        self.live_anim.set_brightness(value)
+        self.backend.lighting_config["brightness"] = value
+
+    def set_brightness_level(self, value: int):
+        self.brightness_slider.setValue(value)
+        self.apply_brightness_now()
+
+    def apply_brightness_now(self):
+        b_val = self.brightness_slider.value()
+        self.backend.set_lighting_brightness(b_val)
+        self.apply_full_configuration()
+
+    def turn_off_led(self):
+        self.brightness_slider.setValue(0)
+        self.backend.set_lighting_brightness(0)
+        self.apply_full_configuration()
 
     def apply_static_keyboard_colors(self):
         layer = self.rgb_layer_combo.currentText()
-        self.live_anim.set_static(self.current_key_colors)
         self.backend.lighting_config = {
             "mode": "static",
             "layer": layer,
             "brightness": int(self.brightness_slider.value()),
-            "static_colors": self.current_key_colors
-        }
-        self.apply_full_configuration()
-
-    def turn_off_led(self):
-        self.live_anim.set_off()
-        self.backend.lighting_config = {
-            "mode": "off",
-            "layer": self.rgb_layer_combo.currentText(),
-            "brightness": 0,
-            "static_colors": self.current_key_colors
+            "static_colors": dict(self.current_key_colors)
         }
         self.apply_full_configuration()
 
     # =========================================================================
     # REMAP & KNOB LOGIC
     # =========================================================================
+    def on_space_mode_toggled(self):
+        if hasattr(self, "remap_radio_split_space") and self.remap_radio_split_space.isChecked():
+            new_mode = "split"
+        else:
+            new_mode = "standard"
+
+        if new_mode != self.space_mode:
+            self.space_mode = new_mode
+            self.backend.space_mode = new_mode
+            self.build_keyboard_grid(
+                self.rgb_grid_layout,
+                self.rgb_key_buttons,
+                self.on_rgb_key_clicked,
+                self.space_mode,
+                mode="rgb"
+            )
+            self.build_keyboard_grid(
+                self.remap_grid_layout,
+                self.remap_key_buttons,
+                self.on_remap_key_selected,
+                self.space_mode,
+                mode="remap"
+            )
+            self.refresh_remap_ui()
+
     def on_remap_layer_changed(self):
-        self.current_remap_layer = self.remap_layer_combo.currentData()
+        self.current_remap_layer = self.remap_layer_combo.currentData() or "Layer1"
         self.refresh_remap_ui()
 
-    def refresh_remap_ui(self):
-        # Update macro dropdown in remap inspector
-        self.remap_macro_combo.blockSignals(True)
-        self.remap_macro_combo.clear()
-        for m_name in self.backend.macros.keys():
-            self.remap_macro_combo.addItem(f"⚡ Makro: {m_name}", f"Macro({m_name})")
-        self.remap_macro_combo.blockSignals(False)
-
-        if self.backend.macros:
-            curr_macro_val = self.remap_macro_combo.currentData()
-            if curr_macro_val:
-                m_obj = self.backend.macros.get(curr_macro_val[6:-1])
-                if m_obj:
-                    self.lbl_macro_details.setText(f"Długość: {len(m_obj.actions)} kroków • Tryb: {m_obj.repeat_type}")
-        else:
-            self.lbl_macro_details.setText("Brak makr. Utwórz je w zakładce 'Menedżer Makr'.")
-
-        # Update visual keyboard buttons on current layer
-        layer_remaps = self.backend.get_remaps_for_layer(self.current_remap_layer)
-        for kid, btn in self.remap_key_buttons.items():
-            action = layer_remaps.get(kid)
-            btn.set_remap(action)
-            btn.set_selected(kid == self.selected_remap_key)
-
-        # Update knob action buttons on current layer
-        for knob_info in KNOBS_METADATA:
-            for act in knob_info["actions"]:
-                aid = act["id"]
-                btn = self.knob_action_buttons.get(aid)
-                if btn:
-                    assigned = layer_remaps.get(aid)
-                    is_sel = (aid == self.selected_remap_key)
-                    if assigned:
-                        friendly_act = get_friendly_action_label(assigned)
-                        btn.setText(f"{act['label']}: {friendly_act}")
-                        btn.setToolTip(f"{knob_info['name']} — {act.get('full_label', act['label'])}\nPrzypisana akcja: {friendly_act}")
-                        btn.setStyleSheet("""
-                            background-color: #1f3554;
-                            border: 2px solid #7aa2f7;
-                            color: #ffffff;
-                            font-weight: bold;
-                        """ if not is_sel else """
-                            background-color: #3d59a1;
-                            border: 2px solid #ff9eaf;
-                            color: #ffffff;
-                            font-weight: bold;
-                        """)
-                    else:
-                        btn.setText(f"{act['label']}: [Domyślnie]")
-                        btn.setToolTip(f"{knob_info['name']} — {act.get('full_label', act['label'])}\nDomyślna akcja: {act.get('default', 'Brak')}")
-                        btn.setStyleSheet("""
-                            background-color: #24293e;
-                            border: 1px solid #3b4261;
-                            color: #c0caf5;
-                        """ if not is_sel else """
-                            background-color: #3d59a1;
-                            border: 2px solid #ff9eaf;
-                            color: #ffffff;
-                            font-weight: bold;
-                        """)
-
-        # Update remapped table
-        self.remap_table.setRowCount(0)
-        for row_idx, (src, dst) in enumerate(layer_remaps.items()):
-            self.remap_table.insertRow(row_idx)
-
-            # Friendly readable source name
-            src_desc = self._get_friendly_key_name(src)
-            dst_desc = get_friendly_action_label(dst)
-            self.remap_table.setItem(row_idx, 0, QTableWidgetItem(src_desc))
-            self.remap_table.setItem(row_idx, 1, QTableWidgetItem(dst_desc))
-
-            btn_del = QPushButton("Usuń")
-            btn_del.clicked.connect(lambda _, k=src: self.delete_remap_from_table(k))
-            self.remap_table.setCellWidget(row_idx, 2, btn_del)
-
-    def _get_friendly_key_name(self, key_id: str) -> str:
-        if key_id == "LeftSpace":
-            return "Lewa Spacja (Left Space)"
-        elif key_id == "RightSpace":
-            return "Prawa Spacja (Right Space)"
-        elif key_id in ["Space_18", "StandardSpace", "Space"]:
-            return "Standardowa Spacja (Space)"
-
-        for k_info in KNOBS_METADATA:
-            for act in k_info["actions"]:
-                if act["id"] == key_id:
-                    return f"{k_info['name']} — {act['label']}"
-
-        for kdef in KEY_DEFINITIONS:
-            if kdef["id"] == key_id:
-                return f"{kdef['label']} ({kdef['id']})"
-
-        return key_id
+    def switch_remap_layer(self, layer_id: str):
+        idx = self.remap_layer_combo.findData(layer_id)
+        if idx >= 0:
+            self.remap_layer_combo.setCurrentIndex(idx)
 
     def on_remap_key_selected(self, key_id: str):
         self.selected_remap_key = key_id
 
-        # Update keyboard buttons selection
-        selected_btn = None
+        # Update selection state in UI visual buttons
         for kid, btn in self.remap_key_buttons.items():
-            is_match = (kid == key_id)
-            btn.set_selected(is_match)
-            if is_match:
-                selected_btn = btn
+            btn.set_selected(kid == key_id)
 
-        # Update knob buttons selection
+        # Highlight knob action buttons if a knob action was clicked
         for aid, btn in self.knob_action_buttons.items():
-            btn_sel = (aid == key_id)
-            layer_remaps = self.backend.get_remaps_for_layer(self.current_remap_layer)
-            assigned = layer_remaps.get(aid)
-            if btn_sel:
-                btn.setStyleSheet("background-color: #3d59a1; border: 2px solid #ff9eaf; color: #ffffff; font-weight: bold;")
-            elif assigned:
-                btn.setStyleSheet("background-color: #1f3554; border: 2px solid #7aa2f7; color: #ffffff; font-weight: bold;")
+            if aid == key_id:
+                btn.setStyleSheet("background-color: #ff9eaf; color: #15161e; font-weight: bold; border-radius: 4px;")
             else:
-                btn.setStyleSheet("background-color: #24293e; border: 1px solid #3b4261; color: #c0caf5;")
+                btn.setStyleSheet("")
 
+        # Update label
         friendly_name = self._get_friendly_key_name(key_id)
-        if selected_btn and getattr(selected_btn, "knob_id", None):
-            self.lbl_selected_remap_key.setText(f"Edytowany element: [ {friendly_name} ] 🎛️ (Gniazdo {selected_btn.knob_name})")
-        else:
-            self.lbl_selected_remap_key.setText(f"Edytowany element: [ {friendly_name} ]")
+        self.lbl_selected_remap_key.setText(tr("remap_selected_item", name=friendly_name))
 
-        self.remap_chassis.update_screen_info("1.04″ SMART SCREEN", f"REMAP: {key_id[:12].upper()}")
+    def _get_friendly_key_name(self, key_id: str) -> str:
+        for k in KEY_DEFINITIONS:
+            if k["id"] == key_id:
+                return f"{k['label']} [{k['id']}]"
+        if key_id in ["LeftSpace", "StandardSpace", "RightSpace"]:
+            return f"Spacebar ({key_id})"
+        for kinfo in get_knobs_metadata():
+            for act in kinfo["actions"]:
+                if act["id"] == key_id:
+                    return f"{kinfo['name']} • {act['full_label']}"
+        return key_id
 
-    def on_category_action_clicked(self, action_code: str, action_label: str, button: QPushButton):
+    def on_action_picked(self, action_code: str, action_label: str, button_widget: QPushButton):
         self.current_picked_action = action_code
-        self.lbl_picked_action_info.setText(f"Wybrana funkcja: {action_label}")
+        self.lbl_picked_action_info.setText(tr("remap_picked_action", action=f"{action_label} [{action_code}]"))
 
-        # Update styling of category buttons
-        for btn_list in self.category_action_buttons.values():
+        # Highlight active action button
+        for cat_title, btn_list in self.category_action_buttons.items():
             for b in btn_list:
-                if b == button:
+                if b == button_widget:
                     b.setStyleSheet("""
                         QPushButton {
-                            background-color: #3d59a1;
-                            border: 2px solid #ff9eaf;
-                            border-radius: 6px;
-                            padding: 6px 6px;
-                            font-size: 11px;
+                            background-color: #ff9eaf;
+                            color: #15161e;
                             font-weight: bold;
-                            text-align: left;
-                            color: #ffffff;
+                            border: 2px solid #ffffff;
                         }
                     """)
                 else:
                     b.setStyleSheet("""
                         QPushButton {
-                            background-color: #24293e;
-                            border: 1px solid #3b4261;
-                            border-radius: 6px;
-                            padding: 6px 6px;
-                            font-size: 11px;
-                            font-weight: bold;
-                            text-align: left;
+                            background-color: #24283b;
                             color: #c0caf5;
                         }
                         QPushButton:hover {
@@ -2422,17 +2540,17 @@ class MainWindow(QMainWindow):
             combo_str = base_k
 
         self.current_picked_action = combo_str
-        self.lbl_picked_action_info.setText(f"Wybrana funkcja: ⚡ Skrót: {combo_str}")
+        self.lbl_picked_action_info.setText(tr("remap_picked_action", action=f"⚡ Combo: {combo_str}"))
 
     def on_macro_combo_changed(self):
         macro_act = self.remap_macro_combo.currentData()
         if macro_act:
             self.current_picked_action = macro_act
-            self.lbl_picked_action_info.setText(f"Wybrana funkcja: {macro_act}")
+            self.lbl_picked_action_info.setText(tr("remap_picked_action", action=macro_act))
             m_name = macro_act[6:-1]
             m_obj = self.backend.macros.get(m_name)
             if m_obj:
-                self.lbl_macro_details.setText(f"Długość: {len(m_obj.actions)} kroków • Tryb: {m_obj.repeat_type}")
+                self.lbl_macro_details.setText(f"Steps: {len(m_obj.actions)} • Mode: {m_obj.repeat_type}")
 
     def on_popular_shortcut_selected(self):
         code = self.popular_shortcuts_combo.currentData()
@@ -2452,13 +2570,13 @@ class MainWindow(QMainWindow):
 
     def assign_selected_remap_action(self):
         if not self.selected_remap_key:
-            QMessageBox.warning(self, "Brak elementu", "Kliknij najpierw klawisz na klawiaturze lub akcję pokrętła!")
+            QMessageBox.warning(self, tr("msg_warning", "Warning"), "Please select a key on the visual keyboard or knob first!")
             return
 
         current_tab_text = self.remap_category_tabs.tabText(self.remap_category_tabs.currentIndex())
         target_action = self.current_picked_action
 
-        if "Kombinacja" in current_tab_text:
+        if "Combination" in current_tab_text or "Skrót" in current_tab_text:
             mods = []
             if self.chk_ctrl.isChecked():
                 mods.append("LCtrl")
@@ -2474,18 +2592,18 @@ class MainWindow(QMainWindow):
                 target_action = "+".join(mods) + "+" + base_k
             else:
                 target_action = base_k
-        elif "Makro" in current_tab_text:
+        elif "Macro" in current_tab_text or "Makro" in current_tab_text:
             target_action = self.remap_macro_combo.currentData()
 
         if not target_action:
-            QMessageBox.warning(self, "Brak wybranej funkcji", "Kliknij jedną z funkcji w zakładkach powyżej przed przypisaniem!")
+            QMessageBox.warning(self, tr("msg_warning", "Warning"), "Please select an action in the tabs above before assigning!")
             return
 
         self.backend.set_key_remap(self.current_remap_layer, self.selected_remap_key, target_action)
         self.refresh_remap_ui()
         friendly_src = self._get_friendly_key_name(self.selected_remap_key)
         friendly_dst = get_friendly_action_label(target_action)
-        self.lbl_bottom_info.setText(f"Przypisano '{friendly_dst}' do '{friendly_src}' na warstwie {self.current_remap_layer}.")
+        self.lbl_bottom_info.setText(tr("msg_assigned_info", dst=friendly_dst, src=friendly_src, layer=self.current_remap_layer))
 
     def reset_selected_key_remap(self):
         if not self.selected_remap_key:
@@ -2500,8 +2618,8 @@ class MainWindow(QMainWindow):
     def clear_current_layer_remaps(self):
         reply = QMessageBox.question(
             self,
-            "Czyszczenie warstwy",
-            f"Czy na pewno chcesz usunąć wszystkie mapowania na warstwie {self.current_remap_layer}?",
+            tr("remap_btn_clear_layer", "Clear Layer"),
+            f"Are you sure you want to clear all remaps on layer {self.current_remap_layer}?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -2509,57 +2627,138 @@ class MainWindow(QMainWindow):
             self.backend.clear_layer_remaps(self.current_remap_layer)
             self.refresh_remap_ui()
 
+    def copy_knobs_to_all_layers(self):
+        self.backend.copy_knob_remaps_to_all_layers(self.current_remap_layer)
+        self.refresh_remap_ui()
+        QMessageBox.information(
+            self,
+            tr("msg_success", "Success"),
+            tr("msg_copy_knobs_success", "Knob configurations copied across all layers.")
+        )
+
+    def on_knob_preset_applied(self, knob_id: str, combo_widget: QComboBox):
+        preset_name = combo_widget.currentData()
+        if not preset_name:
+            return
+        presets = get_knob_presets()
+        preset_dict = presets.get(preset_name)
+        if not preset_dict:
+            return
+
+        for kinfo in get_knobs_metadata():
+            if kinfo["id"] == knob_id:
+                for act in kinfo["actions"]:
+                    aid = act["id"]
+                    if "_CW" in aid:
+                        self.backend.set_key_remap(self.current_remap_layer, aid, preset_dict["CW"])
+                    elif "_CCW" in aid:
+                        self.backend.set_key_remap(self.current_remap_layer, aid, preset_dict["CCW"])
+                    elif "_Click" in aid:
+                        self.backend.set_key_remap(self.current_remap_layer, aid, preset_dict["Click"])
+                break
+
+        self.refresh_remap_ui()
+        combo_widget.blockSignals(True)
+        combo_widget.setCurrentIndex(0)
+        combo_widget.blockSignals(False)
+
+    def refresh_remap_ui(self):
+        layer_remaps = self.backend.remaps.get(self.current_remap_layer, {})
+
+        # 1. Update visual keys on the keyboard plate
+        for kid, btn in self.remap_key_buttons.items():
+            act = layer_remaps.get(kid)
+            btn.set_remap(act)
+            btn.set_selected(kid == self.selected_remap_key)
+
+        # 2. Update Knob action buttons in the knob cards
+        for kinfo in get_knobs_metadata():
+            for act in kinfo["actions"]:
+                aid = act["id"]
+                label_prefix = act["label"]
+                if aid in self.knob_action_buttons:
+                    btn = self.knob_action_buttons[aid]
+                    curr_act = layer_remaps.get(aid, act.get("default", "Default"))
+                    friendly = get_friendly_action_label(curr_act)
+                    btn.setText(f"{label_prefix}: {friendly}")
+                    if aid == self.selected_remap_key:
+                        btn.setStyleSheet("background-color: #ff9eaf; color: #15161e; font-weight: bold; border-radius: 4px;")
+                    else:
+                        btn.setStyleSheet("")
+
+        # 3. Update Macro dropdown in Remap Inspector
+        self.remap_macro_combo.blockSignals(True)
+        self.remap_macro_combo.clear()
+        for m_name in self.backend.macros.keys():
+            self.remap_macro_combo.addItem(f"⚡ {m_name}", f"Macro({m_name})")
+        self.remap_macro_combo.blockSignals(False)
+
+        # 4. Populate Remap Summary Table
+        self.lbl_remap_table_title.setText(tr("remap_table_title", layer=self.current_remap_layer))
+        remap_items = list(layer_remaps.items())
+        self.remap_table.setRowCount(len(remap_items))
+
+        for row_idx, (src_key, dst_act) in enumerate(remap_items):
+            friendly_src = self._get_friendly_key_name(src_key)
+            friendly_dst = get_friendly_action_label(dst_act)
+
+            it_key = QTableWidgetItem(friendly_src)
+            it_act = QTableWidgetItem(friendly_dst)
+            it_code = QTableWidgetItem(dst_act)
+
+            it_key.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+            it_act.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+            it_code.setTextAlignment(Qt.AlignVCenter | Qt.AlignCenter)
+
+            self.remap_table.setItem(row_idx, 0, it_key)
+            self.remap_table.setItem(row_idx, 1, it_act)
+            self.remap_table.setItem(row_idx, 2, it_code)
+
+            del_btn = QPushButton("✕")
+            del_btn.setFixedWidth(28)
+            del_btn.setStyleSheet("background-color: #3b2732; color: #ff9eaf; font-weight: bold; border-radius: 4px;")
+            del_btn.clicked.connect(lambda _, sk=src_key: self.delete_remap_from_table(sk))
+            self.remap_table.setCellWidget(row_idx, 3, del_btn)
+
     # =========================================================================
     # MACRO STUDIO LOGIC
     # =========================================================================
     def refresh_macro_list_ui(self):
-        self.macro_list_widget.blockSignals(True)
         self.macro_list_widget.clear()
-
-        for m_name in self.backend.macros.keys():
-            item = QListWidgetItem(f"⚡ {m_name}")
-            item.setData(Qt.UserRole, m_name)
+        for name, macro in self.backend.macros.items():
+            item = QListWidgetItem(f"⚡ {name} ({len(macro.actions)} steps)")
+            item.setData(Qt.UserRole, name)
             self.macro_list_widget.addItem(item)
-
-        self.macro_list_widget.blockSignals(False)
-
-        if not self.current_macro_name and self.backend.macros:
-            self.current_macro_name = list(self.backend.macros.keys())[0]
 
         if self.current_macro_name:
             for idx in range(self.macro_list_widget.count()):
-                item = self.macro_list_widget.item(idx)
-                if item.data(Qt.UserRole) == self.current_macro_name:
-                    self.macro_list_widget.setCurrentItem(item)
+                it = self.macro_list_widget.item(idx)
+                if it.data(Qt.UserRole) == self.current_macro_name:
+                    self.macro_list_widget.setCurrentItem(it)
                     break
-            self.load_macro_to_editor(self.current_macro_name)
+        elif self.macro_list_widget.count() > 0:
+            self.macro_list_widget.setCurrentRow(0)
 
     def on_macro_selected(self, current: Optional[QListWidgetItem], previous: Optional[QListWidgetItem]):
-        if current:
-            macro_name = current.data(Qt.UserRole)
-            self.current_macro_name = macro_name
-            self.load_macro_to_editor(macro_name)
-
-    def load_macro_to_editor(self, macro_name: str):
-        macro = self.backend.macros.get(macro_name)
+        if not current:
+            return
+        m_name = current.data(Qt.UserRole)
+        self.current_macro_name = m_name
+        macro = self.backend.macros.get(m_name)
         if not macro:
             return
 
         self.macro_name_input.blockSignals(True)
-        self.macro_delay_spin.blockSignals(True)
         self.macro_repeat_combo.blockSignals(True)
         self.macro_repeat_count_spin.blockSignals(True)
 
         self.macro_name_input.setText(macro.name)
-        self.macro_delay_spin.setValue(macro.default_delay)
-
         idx = self.macro_repeat_combo.findData(macro.repeat_type)
         if idx >= 0:
             self.macro_repeat_combo.setCurrentIndex(idx)
         self.macro_repeat_count_spin.setValue(macro.repeat_count)
 
         self.macro_name_input.blockSignals(False)
-        self.macro_delay_spin.blockSignals(False)
         self.macro_repeat_combo.blockSignals(False)
         self.macro_repeat_count_spin.blockSignals(False)
 
@@ -2571,20 +2770,20 @@ class MainWindow(QMainWindow):
             return
 
         macro = self.backend.macros[self.current_macro_name]
-        self.macro_actions_table.setRowCount(0)
+        self.macro_actions_table.setRowCount(len(macro.actions))
 
         for row_idx, act in enumerate(macro.actions):
-            self.macro_actions_table.insertRow(row_idx)
+            it_type = QTableWidgetItem(act.action_type)
+            it_key = QTableWidgetItem(self._get_friendly_key_name(act.key))
 
-            type_item = QTableWidgetItem(act.action_type)
-            type_item.setTextAlignment(Qt.AlignCenter)
-            self.macro_actions_table.setItem(row_idx, 0, type_item)
+            it_type.setTextAlignment(Qt.AlignVCenter | Qt.AlignCenter)
+            it_key.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
 
-            key_item = QTableWidgetItem(act.key)
-            self.macro_actions_table.setItem(row_idx, 1, key_item)
+            self.macro_actions_table.setItem(row_idx, 0, it_type)
+            self.macro_actions_table.setItem(row_idx, 1, it_key)
 
             delay_spin = QSpinBox()
-            delay_spin.setRange(0, 5000)
+            delay_spin.setRange(1, 10000)
             delay_spin.setValue(act.delay)
             delay_spin.valueChanged.connect(lambda val, r=row_idx: self.on_step_delay_changed(r, val))
             self.macro_actions_table.setCellWidget(row_idx, 2, delay_spin)
@@ -2620,7 +2819,6 @@ class MainWindow(QMainWindow):
         if not new_name:
             return
 
-        macro.default_delay = self.macro_delay_spin.value()
         macro.repeat_type = self.macro_repeat_combo.currentData()
         macro.repeat_count = self.macro_repeat_count_spin.value()
 
@@ -2642,7 +2840,7 @@ class MainWindow(QMainWindow):
 
     def add_macro_step(self):
         if not self.current_macro_name or self.current_macro_name not in self.backend.macros:
-            QMessageBox.warning(self, "Brak makra", "Wybierz lub utwórz najpierw makro!")
+            QMessageBox.warning(self, tr("msg_warning", "Warning"), "Please select or create a macro first!")
             return
 
         act_text = self.action_type_combo.currentText()
@@ -2680,6 +2878,14 @@ class MainWindow(QMainWindow):
             self.backend.save_profile()
             self.refresh_macro_actions_table()
 
+    def clear_all_macro_steps(self):
+        if not self.current_macro_name or self.current_macro_name not in self.backend.macros:
+            return
+        macro = self.backend.macros[self.current_macro_name]
+        macro.actions.clear()
+        self.backend.save_profile()
+        self.refresh_macro_actions_table()
+
     def create_new_macro(self):
         idx = 1
         new_name = f"Macro_{idx}"
@@ -2708,14 +2914,27 @@ class MainWindow(QMainWindow):
         self.current_macro_name = dup_name
         self.refresh_macro_list_ui()
 
+    def rename_current_macro(self):
+        if not self.current_macro_name or self.current_macro_name not in self.backend.macros:
+            return
+        name, ok = QInputDialog.getText(self, tr("macro_btn_rename", "Rename"), "Enter new macro name:", text=self.current_macro_name)
+        if ok and name.strip():
+            clean_name = name.strip().replace(" ", "_")
+            macro = self.backend.macros[self.current_macro_name]
+            del self.backend.macros[self.current_macro_name]
+            macro.name = clean_name
+            self.backend.macros[clean_name] = macro
+            self.current_macro_name = clean_name
+            self.backend.save_profile()
+            self.refresh_macro_list_ui()
+
     def delete_current_macro(self):
         if not self.current_macro_name or self.current_macro_name not in self.backend.macros:
             return
-
         reply = QMessageBox.question(
             self,
-            "Usunięcie makra",
-            f"Czy na pewno chcesz bezpowrotnie usunąć makro '{self.current_macro_name}'?",
+            tr("macro_btn_delete", "Delete"),
+            f"Are you sure you want to delete macro '{self.current_macro_name}'?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -2727,119 +2946,67 @@ class MainWindow(QMainWindow):
     def generate_macro_from_text(self):
         text = self.quick_text_input.text()
         if not text:
-            QMessageBox.warning(self, "Brak tekstu", "Wpisz tekst do wygenerowania makra!")
             return
-
-        if not self.current_macro_name or self.current_macro_name not in self.backend.macros:
-            self.create_new_macro()
-
-        actions = self.backend.text_to_macro_actions(text, char_delay=20)
-        macro = self.backend.macros[self.current_macro_name]
-        macro.actions.extend(actions)
-        self.backend.save_profile()
-        self.quick_text_input.clear()
-        self.refresh_macro_actions_table()
-        QMessageBox.information(self, "Wygenerowano", f"Dodano {len(actions)} naciśnięć klawiszy do makra {self.current_macro_name}!")
+        delay = self.quick_text_delay_spin.value()
+        m_name = f"Text_{int(time.time()) % 1000}"
+        macro = self.backend.create_text_macro(m_name, text, delay=delay)
+        self.current_macro_name = macro.name
+        self.refresh_macro_list_ui()
+        QMessageBox.information(
+            self,
+            tr("msg_success", "Success"),
+            f"Generated macro '{macro.name}' with {len(macro.actions)} steps."
+        )
 
     # =========================================================================
-    # DEBUG & PROFILE PERSISTENCE
+    # CODE PREVIEW & EXPORT DIALOGS
     # =========================================================================
     def refresh_debug_code_view(self):
-        code = self.backend.generate_full_config()
-        self.debug_code_text.setPlainText(code)
+        raw_code = self.backend.generate_full_config()
+        self.debug_code_edit.setPlainText(raw_code)
 
-    def open_profile_manager(self):
-        """Open the interactive profile and configuration file manager dialog."""
-        dlg = ProfileManagerDialog(self.backend, main_window=self)
-        dlg.exec()
-        self.refresh_debug_code_view()
-
-    def save_profile_dialog(self, default_type: str = "json"):
-        """Save active configuration to a user-chosen file (JSON profile or GK6X UserData .txt)."""
-        if default_type == "txt":
-            fname, _ = QFileDialog.getSaveFileName(
-                self,
-                "Zapisz plik konfiguracji sprzętowej UserData",
-                f"{self.backend.current_model_id}.txt",
-                "Plik UserData TXT (*.txt);;Wszystkie pliki (*)"
-            )
-            if fname:
-                self.backend.export_raw_config(fname)
-                self.lbl_bottom_info.setText(f"💾 Wyeksportowano plik UserData do: {fname}")
-                QMessageBox.information(
-                    self,
-                    "Zapisano plik UserData",
-                    f"Pomyślnie zapisano plik konfiguracji sprzętowej do:\n{fname}\n\n"
-                    f"Plik ten zawiera pełne definicje kodów GK6X dla modelu {self.backend.current_model_id}."
-                )
-        else:
-            fname, _ = QFileDialog.getSaveFileName(
-                self,
-                "Zapisz profil konfiguracji",
-                "gk104_profile.json",
-                "Profil JSON (*.json);;Profil GK (*.gkprofile);;Wszystkie pliki (*)"
-            )
-            if fname:
-                self.backend.save_profile(fname)
-                self.lbl_bottom_info.setText(f"💾 Zapisano profil do: {fname}")
-                QMessageBox.information(
-                    self,
-                    "Zapisano profil",
-                    f"Pomyślnie zapisano profil konfiguracji do:\n{fname}\n\n"
-                    f"Zawiera on wszystkie mapowania klawiszy, pokręteł, makra oraz ustawienia podświetlenia."
-                )
+    def copy_debug_code_to_clipboard(self):
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self.debug_code_edit.toPlainText())
+        QMessageBox.information(self, tr("msg_success", "Success"), tr("msg_copied_clipboard"))
 
     def export_raw_config_dialog(self):
-        """Export the compiled hardware UserData txt configuration."""
-        self.save_profile_dialog(default_type="txt")
+        fname, _ = QFileDialog.getSaveFileName(self, "Export UserData", "GK104_Config.txt", "GK6X UserData (*.txt);;All files (*)")
+        if fname:
+            try:
+                code = self.backend.generate_full_config()
+                with open(fname, "w", encoding="utf-8") as f:
+                    f.write(code)
+                QMessageBox.information(self, tr("msg_success", "Success"), f"Saved to:\n{fname}")
+            except Exception as e:
+                QMessageBox.critical(self, tr("msg_error", "Error"), str(e))
+
+    def save_profile_dialog(self, default_type: str = "json"):
+        name, ok = QInputDialog.getText(self, tr("pm_btn_save_current", "Save Profile"), "Enter profile name:")
+        if ok and name.strip():
+            path = self.backend.save_named_profile(name.strip(), profile_type=default_type)
+            QMessageBox.information(self, tr("msg_success", "Success"), tr("msg_profile_saved", name=name.strip()))
 
     def load_profile_dialog(self, auto_apply: bool = False):
-        """Open file chooser to load JSON profile or GK6X UserData .txt, with optional immediate flash."""
-        title = "Wczytaj plik i wgraj do klawiatury" if auto_apply else "Wczytaj plik profilu lub konfiguracji"
         fname, _ = QFileDialog.getOpenFileName(
             self,
-            title,
+            "Load Profile",
             "",
-            "Pliki konfiguracji (*.json *.txt *.gkprofile);;Profil JSON (*.json *.gkprofile);;Plik UserData TXT (*.txt);;Wszystkie pliki (*)"
+            "Config Files (*.json *.txt *.gkprofile);;JSON Profile (*.json *.gkprofile);;UserData TXT (*.txt);;All files (*)"
         )
         if fname and os.path.exists(fname):
             ok, msg, _ = self.backend.load_any_config_file(fname)
             if ok:
                 self.apply_loaded_state_to_ui()
                 if auto_apply:
-                    reply = QMessageBox.question(
-                        self,
-                        "Potwierdzenie wgrania do klawiatury",
-                        f"{msg}\n\nCzy chcesz teraz wgrać tę konfigurację bezpośrednio do pamięci Flash klawiatury?",
-                        QMessageBox.Yes | QMessageBox.No,
-                        QMessageBox.Yes
-                    )
-                    if reply == QMessageBox.Yes:
-                        self.apply_full_configuration()
+                    self.apply_full_configuration()
                 else:
-                    QMessageBox.information(
-                        self,
-                        "Wczytano konfigurację",
-                        f"{msg}\n\nUstawienia zostały pomyślnie załadowane do programu!"
-                    )
+                    QMessageBox.information(self, tr("msg_success", "Success"), f"Profile loaded:\n{fname}")
             else:
-                QMessageBox.critical(self, "Błąd wczytywania", msg)
+                QMessageBox.critical(self, tr("msg_error", "Error"), msg)
 
     def apply_loaded_state_to_ui(self):
-        """Synchronize all GUI components with active backend state after loading a profile."""
         self.space_mode = getattr(self.backend, "space_mode", "split")
-
-        # 1. Space mode radio buttons
-        for r in [self.rgb_radio_split_space, self.rgb_radio_single_space, self.remap_radio_split_space, self.remap_radio_single_space]:
-            r.blockSignals(True)
-        self.rgb_radio_split_space.setChecked(self.space_mode == "split")
-        self.rgb_radio_single_space.setChecked(self.space_mode == "standard")
-        self.remap_radio_split_space.setChecked(self.space_mode == "split")
-        self.remap_radio_single_space.setChecked(self.space_mode == "standard")
-        for r in [self.rgb_radio_split_space, self.rgb_radio_single_space, self.remap_radio_split_space, self.remap_radio_single_space]:
-            r.blockSignals(False)
-
-        # 2. Rebuild virtual keyboard visualizers
         self.build_keyboard_grid(
             self.rgb_grid_layout,
             self.rgb_key_buttons,
@@ -2847,8 +3014,6 @@ class MainWindow(QMainWindow):
             self.space_mode,
             mode="rgb"
         )
-        self.live_anim.buttons = self.rgb_key_buttons
-
         self.build_keyboard_grid(
             self.remap_grid_layout,
             self.remap_key_buttons,
@@ -2856,288 +3021,6 @@ class MainWindow(QMainWindow):
             self.space_mode,
             mode="remap"
         )
-
-        # 3. Synchronize lighting state & UI
-        bright_val = int(self.backend.lighting_config.get("brightness", 100))
-        self.brightness_slider.blockSignals(True)
-        self.brightness_slider.setValue(bright_val)
-        self.brightness_slider.blockSignals(False)
-        self.lbl_brightness_val.setText(f"Jasność: {bright_val}%")
-        self.live_anim.set_brightness(bright_val)
-
-        mode = self.backend.lighting_config.get("mode", "preset")
-        if mode == "preset":
-            p_name = self.backend.lighting_config.get("preset_name", "Spectral Cycle")
-            self.live_anim.set_preset(p_name)
-            for i in range(self.effects_list_widget.count()):
-                item = self.effects_list_widget.item(i)
-                if item.data(Qt.UserRole) == p_name:
-                    self.effects_list_widget.blockSignals(True)
-                    self.effects_list_widget.setCurrentItem(item)
-                    self.effects_list_widget.blockSignals(False)
-                    break
-        elif mode == "static":
-            static_colors = self.backend.lighting_config.get("static_colors", {})
-            for kid, color in static_colors.items():
-                if kid in self.rgb_key_buttons:
-                    self.rgb_key_buttons[kid].set_color(color)
-        elif mode == "off":
-            self.live_anim.set_preset(None)
-            for btn in self.rgb_key_buttons.values():
-                btn.set_color("#000000")
-
-        # 4. Refresh Remap UI (Layer, Keys, Knobs)
         self.refresh_remap_ui()
-
-        # 5. Refresh Macro Studio UI
         self.refresh_macro_list_ui()
-
-        # 6. Refresh Debug Code View
         self.refresh_debug_code_view()
-
-        remaps_count = sum(len(m) for m in self.backend.remaps.values())
-        macros_count = len(self.backend.macros)
-        self.lbl_bottom_info.setText(
-            f"✅ Wczytano konfigurację ({remaps_count} zremapowanych klawiszy/pokręteł, {macros_count} makr, tryb: {self.space_mode})."
-        )
-
-    def export_profile_json(self):
-        """Legacy helper for exporting JSON profile."""
-        self.save_profile_dialog(default_type="json")
-
-    def import_profile_json(self):
-        """Legacy helper for importing JSON/TXT profile."""
-        self.load_profile_dialog(auto_apply=False)
-
-    # =========================================================================
-    # BRIGHTNESS & KNOB HELPERS
-    # =========================================================================
-    def on_brightness_slider_changed(self, value: int):
-        self.lbl_brightness_val.setText(f"Jasność: {value}%")
-        self.backend.lighting_config["brightness"] = value
-        self.live_anim.set_brightness(value)
-
-    def set_brightness_level(self, value: int):
-        self.brightness_slider.setValue(value)
-        self.lbl_brightness_val.setText(f"Jasność: {value}%")
-        self.live_anim.set_brightness(value)
-        self.backend.set_brightness(value, auto_apply=True)
-        self.lbl_bottom_info.setText(f"Ustawiono jasność: {value}% i wgrano do klawiatury.")
-
-    def apply_brightness_now(self):
-        val = self.brightness_slider.value()
-        self.backend.set_brightness(val, auto_apply=True)
-        self.lbl_bottom_info.setText(f"Wgrywanie jasności {val}% do klawiatury...")
-
-    def on_knob_preset_applied(self, knob_id: str, combo_box: QComboBox):
-        """Apply selected quick action scheme (CW, CCW, Click) to the specified rotary knob."""
-        preset_name = combo_box.currentData()
-        if not preset_name or preset_name not in KNOB_PRESETS:
-            return
-
-        preset = KNOB_PRESETS[preset_name]
-        for act_suffix, target_code in preset.items():
-            aid = f"{knob_id}_{act_suffix}"
-            self.backend.set_key_remap(self.current_remap_layer, aid, target_code)
-            # Ensure Base layer also receives the knob remap so hardware default layer uses it
-            if self.current_remap_layer != "Base":
-                self.backend.set_key_remap("Base", aid, target_code)
-
-        self.refresh_remap_ui()
-
-        # Reset combo selector without triggering recursion
-        combo_box.blockSignals(True)
-        combo_box.setCurrentIndex(0)
-        combo_box.blockSignals(False)
-
-        self.lbl_bottom_info.setText(
-            f"✅ Zastosowano schemat '{preset_name}' dla {knob_id} (warstwy {self.current_remap_layer} & Base)."
-        )
-
-    def copy_knobs_to_all_layers(self):
-        """Copy rotary knob configurations from active layer to all standard layers."""
-        src_layer_remaps = self.backend.get_remaps_for_layer(self.current_remap_layer)
-        knob_action_ids = [act["id"] for k_info in KNOBS_METADATA for act in k_info["actions"]]
-
-        copied_count = 0
-        for lid, _ in AVAILABLE_LAYERS:
-            if lid in ["Base", "Layer1", "Layer2", "Layer3"]:
-                if lid not in self.backend.remaps:
-                    self.backend.remaps[lid] = {}
-                for aid in knob_action_ids:
-                    if aid in src_layer_remaps:
-                        self.backend.remaps[lid][aid] = src_layer_remaps[aid]
-                        copied_count += 1
-                    elif aid in self.backend.remaps[lid]:
-                        del self.backend.remaps[lid][aid]
-
-        self.backend.save_profile()
-        self.refresh_remap_ui()
-        QMessageBox.information(
-            self,
-            "Pokrętła Skopiowane",
-            f"Pomyślnie zsynchronizowano ustawienia pokręteł z warstwy '{self.current_remap_layer}' "
-            f"na wszystkie warstwy (Base, Layer 1, Layer 2, Layer 3).\n\n"
-            f"Teraz pokrętła będą działać tak samo na każdym profilu klawiatury!"
-        )
-
-    # =========================================================================
-    # SYSTEM TRAY CONTROLLER & BATTERY MONITORING
-    # =========================================================================
-    def init_system_tray(self):
-        self.tray_icon = QSystemTrayIcon(self)
-        app_icon = QIcon.fromTheme("input-keyboard")
-        if app_icon.isNull():
-            pixmap = QPixmap(32, 32)
-            pixmap.fill(QColor("#7aa2f7"))
-            app_icon = QIcon(pixmap)
-        self.tray_icon.setIcon(app_icon)
-        self.tray_icon.setToolTip("Skyloong GK104 Pro Studio")
-
-        # Tray Context Menu
-        self.tray_menu = QMenu()
-
-        self.tray_title_action = QAction("⌨️ Skyloong GK104 Pro Studio", self)
-        self.tray_title_action.setEnabled(False)
-        self.tray_menu.addAction(self.tray_title_action)
-
-        self.tray_battery_action = QAction("🔋 Bateria: Sprawdzanie...", self)
-        self.tray_battery_action.setEnabled(False)
-        self.tray_menu.addAction(self.tray_battery_action)
-
-        self.tray_menu.addSeparator()
-
-        # Brightness Submenu
-        bright_menu = self.tray_menu.addMenu("💡 Jasność Podświetlenia")
-        for b_val, b_label in [
-            (100, "🌕 100% (Maksymalna)"),
-            (75, "🌖 75%"),
-            (50, "🌗 50%"),
-            (25, "🌘 25%"),
-            (0, "🌑 Wyłącz LED (0%)")
-        ]:
-            act = QAction(b_label, self)
-            act.triggered.connect(lambda _, v=b_val: self.on_tray_brightness_selected(v))
-            bright_menu.addAction(act)
-
-        # Quick Presets Submenu
-        preset_menu = self.tray_menu.addMenu("🌈 Szybki Profil RGB")
-        for p_name in ["Spectral Cycle", "Rainbow Streamer", "Breathing", "Cyberpunk 2077", "Matrix Green", "Ice Blizzard"]:
-            act = QAction(p_name, self)
-            act.triggered.connect(lambda _, pn=p_name: self.on_tray_preset_selected(pn))
-            preset_menu.addAction(act)
-
-        act_off = QAction("🌙 Wyłącz podświetlenie", self)
-        act_off.triggered.connect(self.turn_off_led)
-        preset_menu.addAction(act_off)
-
-        # Profile / Layer Submenu
-        layer_menu = self.tray_menu.addMenu("🔀 Warstwa Klawiatury")
-        for lid, lname in AVAILABLE_LAYERS[:4]:
-            act = QAction(lname, self)
-            act.triggered.connect(lambda _, l=lid: self.on_tray_layer_selected(l))
-            layer_menu.addAction(act)
-
-        self.tray_menu.addSeparator()
-
-        self.tray_show_action = QAction("🖥️ Pokaż / Ukryj okno", self)
-        self.tray_show_action.triggered.connect(self.toggle_window_visibility)
-        self.tray_menu.addAction(self.tray_show_action)
-
-        act_apply = QAction("💾 Wgraj bieżącą konfigurację", self)
-        act_apply.triggered.connect(self.apply_full_configuration)
-        self.tray_menu.addAction(act_apply)
-
-        self.tray_menu.addSeparator()
-
-        act_exit = QAction("🚪 Zakończ program", self)
-        act_exit.triggered.connect(QApplication.instance().quit)
-        self.tray_menu.addAction(act_exit)
-
-        self.tray_icon.setContextMenu(self.tray_menu)
-        self.tray_icon.activated.connect(self.on_tray_icon_activated)
-        self.tray_icon.show()
-
-        # Background status timer (updates every 4 seconds)
-        self.status_timer = QTimer(self)
-        self.status_timer.timeout.connect(self.refresh_system_status)
-        self.status_timer.start(4000)
-        self.refresh_system_status()
-
-    def refresh_system_status(self):
-        """Update battery and connection status on both main window and tray."""
-        try:
-            bat_info = get_system_battery_info()
-            if bat_info["has_battery"]:
-                bat_text = f"{bat_info['icon']} Bateria: {bat_info['percentage']}% ({bat_info['status']})"
-                self.lbl_battery_header.setText(bat_text)
-                self.tray_battery_action.setText(bat_text)
-                tooltip = f"Skyloong GK104 Pro Studio\n{bat_text}"
-            else:
-                self.lbl_battery_header.setText("🔌 Zasilanie sieciowe")
-                self.tray_battery_action.setText("🔌 Zasilanie sieciowe (Brak baterii)")
-                tooltip = "Skyloong GK104 Pro Studio\nZasilanie sieciowe"
-
-            current_bright = self.backend.lighting_config.get("brightness", 100)
-            tooltip += f"\n💡 Jasność RGB: {current_bright}%"
-            self.tray_icon.setToolTip(tooltip)
-        except Exception as e:
-            print(f"Error in refresh_system_status: {e}")
-
-    def on_tray_brightness_selected(self, value: int):
-        self.set_brightness_level(value)
-        self.tray_icon.showMessage(
-            "Jasność Klawiatury",
-            f"Ustawiono jasność podświetlenia na {value}%",
-            QSystemTrayIcon.Information,
-            1500
-        )
-
-    def on_tray_preset_selected(self, preset_name: str):
-        if preset_name in COLOR_PRESETS:
-            self.apply_preset_theme(preset_name)
-            self.apply_static_keyboard_colors()
-        else:
-            self.backend.set_lighting_preset(preset_name, layer="Base", auto_apply=True)
-        self.tray_icon.showMessage(
-            "Profil RGB",
-            f"Zastosowano profil '{preset_name}'",
-            QSystemTrayIcon.Information,
-            1500
-        )
-
-    def on_tray_layer_selected(self, layer_id: str):
-        idx = self.remap_layer_combo.findData(layer_id)
-        if idx >= 0:
-            self.remap_layer_combo.setCurrentIndex(idx)
-        self.tray_icon.showMessage(
-            "Warstwa Klawiatury",
-            f"Wybrano warstwę: {layer_id}",
-            QSystemTrayIcon.Information,
-            1500
-        )
-
-    def toggle_window_visibility(self):
-        if self.isVisible():
-            self.hide()
-        else:
-            self.showNormal()
-            self.activateWindow()
-
-    def on_tray_icon_activated(self, reason: QSystemTrayIcon.ActivationReason):
-        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
-            self.toggle_window_visibility()
-
-    def closeEvent(self, event):
-        """Minimize to tray instead of quitting on window close."""
-        if self.tray_icon.isVisible():
-            self.hide()
-            self.tray_icon.showMessage(
-                "Skyloong Studio działa w tle",
-                "Aplikacja została zminimalizowana do zasobnika systemowego KDE. Kliknij ikonę, aby ją otworzyć.",
-                QSystemTrayIcon.Information,
-                2000
-            )
-            event.ignore()
-        else:
-            event.accept()

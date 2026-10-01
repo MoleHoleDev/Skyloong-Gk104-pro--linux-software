@@ -94,6 +94,13 @@ An advanced, native **Python / PySide6 (Qt6)** graphical utility built for Linux
 
 ---
 
+### 7. 🌐 Multilingual Language Packs (English & Polish)
+* **Built-in Language System:** Complete localization support for **English** (default) and **Polish (Polski)**.
+* **Live Language Switcher:** Instant UI language toggling via the top header bar selector and system tray context menu without application restarts.
+* **Persistent Preferences:** Automatically saves and restores language selection across application restarts in `~/.config/skyloong_studio/config.json`.
+
+---
+
 ## 📸 Screenshots & Interface Walkthrough
 
 | 1. Key Remapping & Modular Rotary Knobs | 2. RGB Lighting Studio & Live Visualizer |
@@ -311,6 +318,13 @@ All local application profiles, active states, and backups are stored in the use
   * **Kopia JSON (.json / .gkprofile):** Kompletny zapis układów, pokręteł, makr i kolorystyki RGB.
   * **Kod sprzętowy (.txt UserData):** Format zgodny z niskopoziomowym protokołem mikrokontrolera GK6X.
 * **Przycisk "Wgraj do klawiatury" (Apply):** Kompilacja i bezpośredni zapis do pamięci Flash/EEPROM klawiatury.
+
+---
+
+### 7. 🌐 Obsługa Paczek Językowych (Angielski i Polski)
+* **Wbudowane wsparcie wielojęzyczne:** Kompletna lokalizacja w języku **angielskim** (domyślnym) oraz **polskim**.
+* **Przełącznik w czasie rzeczywistym:** Natychmiastowa zmiana języka interfejsu z poziomu paska nagłówka oraz menu zasobnika systemowego (tray) bez konieczności restartu programu.
+* **Automatyczne zapamiętywanie:** Wybrany język jest automatycznie zapisywany w `~/.config/skyloong_studio/config.json`.
 
 ---
 

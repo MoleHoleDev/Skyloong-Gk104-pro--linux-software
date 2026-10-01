@@ -10,6 +10,13 @@ from typing import List, Dict, Optional, Tuple, Any
 from PySide6.QtCore import QObject, Signal, QThread
 
 from system_checker import SystemChecker
+import i18n
+from i18n import (
+    tr, get_knobs_metadata, get_knob_presets,
+    get_target_key_categories, get_popular_shortcuts,
+    get_available_layers, get_action_short_labels,
+    get_friendly_action_label
+)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_APP_DIR = os.path.join(BASE_DIR, "GK6X-v1.22")
@@ -806,6 +813,7 @@ class GKBackend(QObject):
     device_status_signal = Signal(bool, str, str)  # is_connected, model_id, model_name
     apply_finished = Signal(bool, str)
     unmap_finished = Signal(bool, str)
+    log_message = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -907,6 +915,21 @@ class GKBackend(QObject):
 
         self.device_status_signal.emit(False, self.current_model_id, "Nie wykryto urządzenia")
         return False, self.current_model_id, "Nie wykryto urządzenia"
+
+    def get_device_status_info(self) -> Dict[str, Any]:
+        connected, model_id, dev_name = self.detect_device()
+        vid = "1ea7"
+        pid = "0907"
+        if hasattr(self, "last_device_info") and isinstance(self.last_device_info, dict):
+            vid = self.last_device_info.get("vid", "1ea7")
+            pid = self.last_device_info.get("pid", "0907")
+        return {
+            "connected": connected,
+            "model_id": model_id,
+            "device_name": dev_name,
+            "vid": vid,
+            "pid": pid
+        }
 
     def get_available_effects(self) -> List[Dict[str, str]]:
         """List all available .le files categorized."""
