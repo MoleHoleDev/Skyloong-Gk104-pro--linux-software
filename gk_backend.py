@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import re
+import datetime
 from typing import List, Dict, Optional, Tuple, Any
 from PySide6.QtCore import QObject, Signal, QThread
 
@@ -22,6 +23,7 @@ EXE_PATH = os.path.join(APP_DIR, "GK6X.exe")
 LIGHTING_DIR = os.path.join(APP_DIR, "Data", "lighting")
 USERDATA_DIR = os.path.join(APP_DIR, "UserData")
 CONFIG_SAVE_PATH = os.path.expanduser("~/.config/skyloong_studio/profile.json")
+PROFILES_DIR = os.path.expanduser("~/.config/skyloong_studio/profiles")
 
 def scan_linux_usb_devices() -> List[Dict[str, Any]]:
     """Scan Linux sysfs, hidraw, input and USB subsystems for connected Skyloong / Semitek devices."""
@@ -1282,12 +1284,13 @@ class GKBackend(QObject):
         self.unmap_finished.emit(success, msg)
 
     # ==========================
-    # PROFILE PERSISTENCE
+    # PROFILE & CONFIG PERSISTENCE
     # ==========================
     def save_profile(self, path: Optional[str] = None):
+        """Save current application state to a JSON profile file."""
         target_path = path or CONFIG_SAVE_PATH
         try:
-            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            os.makedirs(os.path.dirname(os.path.abspath(target_path)), exist_ok=True)
             data = {
                 "model_id": self.current_model_id,
                 "space_mode": getattr(self, "space_mode", "split"),
@@ -1301,6 +1304,7 @@ class GKBackend(QObject):
             print(f"Error saving profile: {e}")
 
     def load_profile(self, path: Optional[str] = None):
+        """Load application state from a JSON profile file."""
         target_path = path or CONFIG_SAVE_PATH
         if not os.path.exists(target_path):
             self.space_mode = "split"
@@ -1321,6 +1325,209 @@ class GKBackend(QObject):
             print(f"Error loading profile: {e}")
             self.space_mode = "split"
             self._init_default_macros()
+
+    def export_raw_config(self, path: str):
+        """Export the compiled GK6X UserData configuration (.txt) to a specified file."""
+        content = self.generate_full_config()
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+    def parse_raw_config_text(self, text: str) -> Dict[str, Any]:
+        """Parse GK6X UserData txt configuration file into structured dictionary."""
+        remaps: Dict[str, Dict[str, str]] = {layer_id: {} for layer_id, _ in AVAILABLE_LAYERS}
+        macros: Dict[str, MacroItem] = {}
+        lighting_config: Dict[str, Any] = {
+            "mode": "preset",
+            "preset_name": "Spectral Cycle",
+            "layer": "Base",
+            "brightness": 100,
+            "static_colors": {k["id"]: "#00ffff" for k in KEY_DEFINITIONS}
+        }
+        space_mode = "split"
+
+        current_section: Optional[str] = None
+        current_macro: Optional[MacroItem] = None
+
+        macro_header_re = re.compile(r"^\[Macro\(([^,]+),(\d+),([^,]+),(\d+)\)\]$")
+        lighting_header_re = re.compile(r"^\[Lighting\(([^,]+),([^)]+)\)\]$")
+
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or line.startswith(";"):
+                continue
+
+            if line.startswith("[") and line.endswith("]"):
+                if current_macro is not None:
+                    macros[current_macro.name] = current_macro
+                    current_macro = None
+
+                m_macro = macro_header_re.match(line)
+                if m_macro:
+                    current_section = "Macro"
+                    current_macro = MacroItem(
+                        name=m_macro.group(1),
+                        default_delay=int(m_macro.group(2)),
+                        repeat_type=m_macro.group(3),
+                        repeat_count=int(m_macro.group(4)),
+                        actions=[]
+                    )
+                    continue
+
+                m_light = lighting_header_re.match(line)
+                if m_light:
+                    current_section = "Lighting"
+                    p_name = m_light.group(1)
+                    if p_name == "CustomGUIStatic":
+                        lighting_config["mode"] = "static"
+                    else:
+                        lighting_config["mode"] = "preset"
+                        lighting_config["preset_name"] = p_name
+                    lighting_config["layer"] = m_light.group(2)
+                    continue
+
+                if line == "[NoLighting]":
+                    current_section = "Lighting"
+                    lighting_config["mode"] = "off"
+                    continue
+
+                sec_name = line[1:-1]
+                current_section = sec_name
+                continue
+
+            # Process block content lines
+            if current_section == "Macro" and current_macro is not None:
+                parts = line.split(":")
+                act_type = parts[0]
+                key_combo = parts[1] if len(parts) > 1 else ""
+                delay = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else current_macro.default_delay
+                current_macro.actions.append(MacroAction(action_type=act_type, key=key_combo, delay=delay))
+            elif current_section == "KeyAlias":
+                pass
+            elif current_section in remaps or current_section in [l[0] for l in AVAILABLE_LAYERS]:
+                if ":" in line:
+                    src, dst = line.split(":", 1)
+                    src = src.strip()
+                    dst = dst.strip()
+
+                    # Convert mapped space aliases
+                    if src == "LeftSpace":
+                        src = "Space_17"
+                        space_mode = "split"
+                    elif src == "StandardSpace":
+                        src = "Space"
+                        space_mode = "standard"
+                    elif src == "RightSpace":
+                        src = "Space_19"
+                        space_mode = "split"
+
+                    dst = HEX_OR_ALIAS_TO_CANONICAL.get(dst, dst)
+                    if current_section not in remaps:
+                        remaps[current_section] = {}
+                    remaps[current_section][src] = dst
+
+        if current_macro is not None:
+            macros[current_macro.name] = current_macro
+
+        return {
+            "remaps": remaps,
+            "macros": macros,
+            "lighting": lighting_config,
+            "space_mode": space_mode
+        }
+
+    def load_raw_config(self, path: str) -> Dict[str, Any]:
+        """Load and parse GK6X UserData txt configuration file into active state."""
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        parsed = self.parse_raw_config_text(content)
+        self.remaps = parsed["remaps"]
+        self.macros = parsed["macros"]
+        self.lighting_config = parsed["lighting"]
+        self.space_mode = parsed["space_mode"]
+        self.save_profile()
+        return parsed
+
+    def load_any_config_file(self, path: str) -> Tuple[bool, str, Dict[str, Any]]:
+        """Universal loader for both JSON profiles and GK6X UserData .txt files."""
+        if not os.path.exists(path):
+            return False, f"Plik {path} nie istnieje.", {}
+
+        try:
+            filename = os.path.basename(path)
+            if path.endswith(".json") or path.endswith(".gkprofile"):
+                self.load_profile(path)
+                self.save_profile()
+                remaps_count = sum(len(m) for m in self.remaps.values())
+                macros_count = len(self.macros)
+                msg = f"Wczytano profil JSON '{filename}' ({remaps_count} zremapowanych klawiszy/pokręteł, {macros_count} makr)."
+                return True, msg, {
+                    "remaps": self.remaps,
+                    "macros": self.macros,
+                    "lighting": self.lighting_config,
+                    "space_mode": getattr(self, "space_mode", "split")
+                }
+            else:
+                parsed = self.load_raw_config(path)
+                remaps_count = sum(len(m) for m in parsed["remaps"].values())
+                macros_count = len(parsed["macros"])
+                msg = f"Wczytano plik konfiguracji sprzętowej UserData '{filename}' ({remaps_count} przypisań, {macros_count} makr)."
+                return True, msg, parsed
+        except Exception as e:
+            return False, f"Błąd podczas wczytywania pliku: {e}", {}
+
+    def get_saved_profiles(self) -> List[Dict[str, Any]]:
+        """Return list of saved profiles and configuration files from the user directory."""
+        os.makedirs(PROFILES_DIR, exist_ok=True)
+        results = []
+        try:
+            for fname in sorted(os.listdir(PROFILES_DIR)):
+                if fname.endswith(".json") or fname.endswith(".txt") or fname.endswith(".gkprofile"):
+                    fpath = os.path.join(PROFILES_DIR, fname)
+                    try:
+                        mtime = os.path.getmtime(fpath)
+                        dt_str = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+                        size_kb = max(1, int(os.path.getsize(fpath) / 1024))
+                        is_json = fname.endswith(".json") or fname.endswith(".gkprofile")
+                        results.append({
+                            "name": os.path.splitext(fname)[0],
+                            "filename": fname,
+                            "path": fpath,
+                            "date": dt_str,
+                            "type": "JSON Profile" if is_json else "UserData TXT",
+                            "size_str": f"{size_kb} KB"
+                        })
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"Error listing saved profiles: {e}")
+        return results
+
+    def save_named_profile(self, name: str, profile_type: str = "json") -> str:
+        """Save active state to user profiles directory with the specified name and format."""
+        os.makedirs(PROFILES_DIR, exist_ok=True)
+        safe_name = "".join([c for c in name if c.isalnum() or c in " _-."]).strip()
+        if not safe_name:
+            safe_name = "Profil_Uzytkownika"
+
+        if profile_type.lower() == "txt":
+            target_path = os.path.join(PROFILES_DIR, f"{safe_name}.txt")
+            self.export_raw_config(target_path)
+        else:
+            target_path = os.path.join(PROFILES_DIR, f"{safe_name}.json")
+            self.save_profile(target_path)
+        return target_path
+
+    def delete_named_profile(self, filename: str) -> bool:
+        """Delete a profile file from user profiles directory."""
+        target_path = os.path.join(PROFILES_DIR, filename)
+        if os.path.exists(target_path):
+            try:
+                os.remove(target_path)
+                return True
+            except Exception:
+                return False
+        return False
 
     def _init_default_macros(self):
         """Create some handy initial macro samples."""

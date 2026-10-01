@@ -2,6 +2,7 @@ import math
 import os
 import sys
 import time
+import shutil
 from typing import Dict, List, Optional
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -10,7 +11,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QMessageBox, QProgressBar, QButtonGroup, QSizePolicy,
     QTableWidget, QTableWidgetItem, QHeaderView, QSpinBox, QCheckBox,
     QGroupBox, QSplitter, QTextEdit, QPlainTextEdit, QFileDialog,
-    QRadioButton, QSlider, QMenu, QSystemTrayIcon, QDialog
+    QRadioButton, QSlider, QMenu, QSystemTrayIcon, QDialog, QInputDialog
 )
 from PySide6.QtCore import Qt, QSize, Signal, QTimer, QObject
 from PySide6.QtGui import QColor, QFont, QIcon, QPixmap, QAction, QPainter, QLinearGradient, QBrush, QPen
@@ -592,6 +593,285 @@ class ComponentInstallerDialog(QDialog):
             self.refresh_diagnostics()
 
 
+class ProfileManagerDialog(QDialog):
+    """Interactive manager for saved keyboard configurations, JSON profiles and GK6X UserData files."""
+    def __init__(self, backend: GKBackend, main_window=None, parent=None):
+        super().__init__(parent or main_window)
+        self.backend = backend
+        self.main_window = main_window
+        self.setWindowTitle("📁 Menedżer Profili i Zapisów Konfiguracji — Skyloong GK104 Pro")
+        self.resize(780, 520)
+        self.setMinimumSize(660, 420)
+        self.profiles_data: List[Dict[str, Any]] = []
+        self.init_ui()
+        self.refresh_profiles_list()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        # Header Info Card
+        header_card = QFrame()
+        header_card.setObjectName("cardFrame")
+        h_box = QVBoxLayout(header_card)
+        h_box.setContentsMargins(12, 10, 12, 10)
+        h_box.setSpacing(4)
+
+        lbl_title = QLabel("💾 Zarządzanie Zapisami Ustawień & Profilami Klawiatury")
+        lbl_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #7aa2f7;")
+        h_box.addWidget(lbl_title)
+
+        lbl_desc = QLabel(
+            "Zarządzaj swoimi konfiguracjami remapowania klawiszy, pokręteł, makr i oświetlenia LED. "
+            "Możesz zapisywać nowe profile, importować pliki z dysku (.json / .txt) oraz bezpośrednio programować klawiaturę."
+        )
+        lbl_desc.setWordWrap(True)
+        lbl_desc.setStyleSheet("color: #a9b1d6; font-size: 11px;")
+        h_box.addWidget(lbl_desc)
+        layout.addWidget(header_card)
+
+        # Top Action Buttons Row
+        actions_row = QHBoxLayout()
+        actions_row.setSpacing(8)
+
+        self.btn_save_current = QPushButton("💾 Zapisz bieżące ustawienia...")
+        self.btn_save_current.setObjectName("primaryBtn")
+        self.btn_save_current.setToolTip("Zapisz aktualną konfigurację z programu jako nowy profil")
+        self.btn_save_current.clicked.connect(self.on_save_current_clicked)
+        actions_row.addWidget(self.btn_save_current)
+
+        self.btn_import_file = QPushButton("📥 Importuj z dysku...")
+        self.btn_import_file.setToolTip("Wczytaj dowolny plik .json lub .txt z dysku do biblioteki profili")
+        self.btn_import_file.clicked.connect(self.on_import_file_clicked)
+        actions_row.addWidget(self.btn_import_file)
+
+        self.btn_export_file = QPushButton("📤 Eksportuj plik...")
+        self.btn_export_file.setToolTip("Zapisz wybrany profil w dowolnej lokalizacji na dysku")
+        self.btn_export_file.clicked.connect(self.on_export_file_clicked)
+        actions_row.addWidget(self.btn_export_file)
+
+        self.btn_refresh = QPushButton("🔄 Odśwież")
+        self.btn_refresh.setToolTip("Odśwież listę zapisanych profili")
+        self.btn_refresh.clicked.connect(self.refresh_profiles_list)
+        actions_row.addWidget(self.btn_refresh)
+
+        actions_row.addStretch()
+        layout.addLayout(actions_row)
+
+        # Profiles Table
+        self.table = QTableWidget()
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(["Nazwa Konfiguracji", "Format", "Data modyfikacji", "Rozmiar"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SingleSelection)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.itemDoubleClicked.connect(self.on_table_double_clicked)
+        self.table.itemSelectionChanged.connect(self.on_selection_changed)
+        layout.addWidget(self.table)
+
+        # Info label for selected profile
+        self.lbl_selected_info = QLabel("Wybierz profil z tabeli powyżej (lub kliknij dwukrotnie), aby wczytać.")
+        self.lbl_selected_info.setStyleSheet("color: #7aa2f7; font-size: 11px; padding: 2px 4px;")
+        layout.addWidget(self.lbl_selected_info)
+
+        # Bottom Action Bar
+        bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(8)
+
+        self.btn_load_to_app = QPushButton("📂 Wczytaj do edytora")
+        self.btn_load_to_app.setStyleSheet("padding: 8px 16px; font-weight: bold; min-height: 24px;")
+        self.btn_load_to_app.setEnabled(False)
+        self.btn_load_to_app.clicked.connect(self.on_load_to_app_clicked)
+        bottom_row.addWidget(self.btn_load_to_app)
+
+        self.btn_flash_to_kb = QPushButton("⚡ Wgraj do klawiatury (Flash)")
+        self.btn_flash_to_kb.setObjectName("successBtn")
+        self.btn_flash_to_kb.setStyleSheet("padding: 8px 16px; font-weight: bold; min-height: 24px;")
+        self.btn_flash_to_kb.setEnabled(False)
+        self.btn_flash_to_kb.clicked.connect(self.on_flash_to_kb_clicked)
+        bottom_row.addWidget(self.btn_flash_to_kb)
+
+        self.btn_delete = QPushButton("🗑️ Usuń")
+        self.btn_delete.setObjectName("dangerBtn")
+        self.btn_delete.setEnabled(False)
+        self.btn_delete.clicked.connect(self.on_delete_clicked)
+        bottom_row.addWidget(self.btn_delete)
+
+        bottom_row.addStretch()
+
+        btn_close = QPushButton("Zamknij")
+        btn_close.clicked.connect(self.accept)
+        bottom_row.addWidget(btn_close)
+
+        layout.addLayout(bottom_row)
+
+    def refresh_profiles_list(self):
+        self.profiles_data = self.backend.get_saved_profiles()
+        self.table.setRowCount(len(self.profiles_data))
+        for row, p in enumerate(self.profiles_data):
+            it_name = QTableWidgetItem(f"📄 {p['name']}")
+            it_name.setData(Qt.UserRole, p)
+            it_type = QTableWidgetItem(p["type"])
+            it_date = QTableWidgetItem(p["date"])
+            it_size = QTableWidgetItem(p["size_str"])
+
+            for it in [it_name, it_type, it_date, it_size]:
+                it.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+
+            self.table.setItem(row, 0, it_name)
+            self.table.setItem(row, 1, it_type)
+            self.table.setItem(row, 2, it_date)
+            self.table.setItem(row, 3, it_size)
+
+        if not self.profiles_data:
+            self.lbl_selected_info.setText("Brak zapisanych profili w ~/.config/skyloong_studio/profiles/. Kliknij 'Zapisz bieżące ustawienia...' aby utworzyć profil!")
+        else:
+            self.lbl_selected_info.setText(f"Dostępnych profili: {len(self.profiles_data)}. Wybierz profil, aby nim zarządzać.")
+
+        self.on_selection_changed()
+
+    def _get_selected_profile(self) -> Optional[Dict[str, Any]]:
+        row = self.table.currentRow()
+        if row >= 0 and row < len(self.profiles_data):
+            return self.profiles_data[row]
+        return None
+
+    def on_selection_changed(self):
+        p = self._get_selected_profile()
+        has_sel = p is not None
+        self.btn_load_to_app.setEnabled(has_sel)
+        self.btn_flash_to_kb.setEnabled(has_sel)
+        self.btn_export_file.setEnabled(has_sel)
+        self.btn_delete.setEnabled(has_sel)
+
+        if p:
+            self.lbl_selected_info.setText(
+                f"Wybrano: {p['name']} ({p['type']}, {p['size_str']}, zmodyfikowano: {p['date']})"
+            )
+
+    def on_table_double_clicked(self, item):
+        self.on_load_to_app_clicked()
+
+    def on_load_to_app_clicked(self):
+        p = self._get_selected_profile()
+        if not p:
+            return
+        ok, msg, _ = self.backend.load_any_config_file(p["path"])
+        if ok:
+            if self.main_window and hasattr(self.main_window, "apply_loaded_state_to_ui"):
+                self.main_window.apply_loaded_state_to_ui()
+            QMessageBox.information(self, "Wczytano profil", f"{msg}\n\nUstawienia zostały pomyślnie załadowane do edytora!")
+        else:
+            QMessageBox.critical(self, "Błąd wczytywania", msg)
+
+    def on_flash_to_kb_clicked(self):
+        p = self._get_selected_profile()
+        if not p:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Wgraj do klawiatury",
+            f"Czy na pewno chcesz wgrać profil '{p['name']}' bezpośrednio do pamięci Flash klawiatury?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        if reply == QMessageBox.Yes:
+            ok, msg, _ = self.backend.load_any_config_file(p["path"])
+            if ok:
+                if self.main_window and hasattr(self.main_window, "apply_loaded_state_to_ui"):
+                    self.main_window.apply_loaded_state_to_ui()
+                if self.main_window and hasattr(self.main_window, "apply_full_configuration"):
+                    self.accept()
+                    self.main_window.apply_full_configuration()
+            else:
+                QMessageBox.critical(self, "Błąd", msg)
+
+    def on_save_current_clicked(self):
+        name, ok = QInputDialog.getText(
+            self,
+            "Zapisz nowy profil",
+            "Podaj nazwę dla zapisywanej konfiguracji (np. Profil_Praca, Gry_FPS, Makra_Knoby):"
+        )
+        if ok and name.strip():
+            ptype, ok_type = QInputDialog.getItem(
+                self,
+                "Format pliku",
+                "Wybierz format zapisu:",
+                ["Profil JSON (.json - zalecany)", "Konfiguracja sprzętowa GK6X UserData (.txt)"],
+                0,
+                False
+            )
+            if ok_type:
+                fmt = "txt" if "UserData" in ptype else "json"
+                out_path = self.backend.save_named_profile(name.strip(), profile_type=fmt)
+                self.refresh_profiles_list()
+                QMessageBox.information(
+                    self,
+                    "Zapisano",
+                    f"Pomyślnie zapisano profil '{name.strip()}' do katalogu profili:\n{out_path}"
+                )
+
+    def on_import_file_clicked(self):
+        fname, _ = QFileDialog.getOpenFileName(
+            self,
+            "Wybierz plik do importu",
+            "",
+            "Pliki konfiguracji (*.json *.txt *.gkprofile);;Profil JSON (*.json *.gkprofile);;Plik UserData TXT (*.txt);;Wszystkie pliki (*)"
+        )
+        if fname and os.path.exists(fname):
+            basename = os.path.splitext(os.path.basename(fname))[0]
+            fmt = "txt" if fname.endswith(".txt") else "json"
+            ok, msg, _ = self.backend.load_any_config_file(fname)
+            if ok:
+                self.backend.save_named_profile(basename, profile_type=fmt)
+                self.refresh_profiles_list()
+                if self.main_window and hasattr(self.main_window, "apply_loaded_state_to_ui"):
+                    self.main_window.apply_loaded_state_to_ui()
+                QMessageBox.information(
+                    self,
+                    "Import zakończony",
+                    f"{msg}\n\nProfil został dodany do biblioteki profili oraz załadowany do programu."
+                )
+            else:
+                QMessageBox.critical(self, "Błąd importu", msg)
+
+    def on_export_file_clicked(self):
+        p = self._get_selected_profile()
+        if not p:
+            return
+        ext_filter = "Profil JSON (*.json)" if p["type"] == "JSON Profile" else "UserData TXT (*.txt)"
+        fname, _ = QFileDialog.getSaveFileName(self, "Eksportuj profil", p["filename"], f"{ext_filter};;Wszystkie pliki (*)")
+        if fname:
+            try:
+                shutil.copy2(p["path"], fname)
+                QMessageBox.information(self, "Eksport", f"Pomyślnie wyeksportowano profil do:\n{fname}")
+            except Exception as e:
+                QMessageBox.critical(self, "Błąd", f"Nie udało się wyeksportować pliku: {e}")
+
+    def on_delete_clicked(self):
+        p = self._get_selected_profile()
+        if not p:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Potwierdzenie usunięcia",
+            f"Czy na pewno chcesz bezpowrotnie usunąć profil '{p['name']}' ({p['filename']})?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            if self.backend.delete_named_profile(p["filename"]):
+                self.refresh_profiles_list()
+                QMessageBox.information(self, "Usunięto", f"Usunięto profil '{p['name']}'.")
+            else:
+                QMessageBox.warning(self, "Błąd", f"Nie udało się usunąć pliku {p['filename']}.")
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -679,6 +959,36 @@ class MainWindow(QMainWindow):
         self.btn_check_system.setStyleSheet("background-color: #24283b; color: #7aa2f7; border: 1px solid #3b4261; border-radius: 6px; padding: 6px 12px; min-height: 24px;")
         self.btn_check_system.clicked.connect(self.open_components_dialog)
         header_layout.addWidget(self.btn_check_system)
+
+        # Profiles & Files Dropdown Menu Button
+        self.btn_profiles_menu = QPushButton("📁 Profile & Pliki ▾")
+        self.btn_profiles_menu.setToolTip("Zarządzaj zapisami konfiguracji, plikami UserData i profilami")
+        self.btn_profiles_menu.setStyleSheet("background-color: #24283b; color: #7aa2f7; border: 1px solid #3b4261; border-radius: 6px; padding: 6px 12px; min-height: 24px; font-weight: bold;")
+
+        self.profiles_menu = QMenu(self)
+        self.profiles_menu.setStyleSheet("background-color: #1f2335; color: #c0caf5; border: 1px solid #414868; padding: 4px;")
+
+        act_open_mgr = self.profiles_menu.addAction("📋 Menedżer Zapisanych Profili...")
+        act_open_mgr.triggered.connect(self.open_profile_manager)
+
+        self.profiles_menu.addSeparator()
+
+        act_save_json = self.profiles_menu.addAction("💾 Zapisz profil jako JSON...")
+        act_save_json.triggered.connect(lambda: self.save_profile_dialog(default_type="json"))
+
+        act_save_txt = self.profiles_menu.addAction("📄 Zapisz kod sprzętowy (.txt UserData)...")
+        act_save_txt.triggered.connect(self.export_raw_config_dialog)
+
+        self.profiles_menu.addSeparator()
+
+        act_load_file = self.profiles_menu.addAction("📂 Wczytaj profil / plik konfiguracji (.json / .txt)...")
+        act_load_file.triggered.connect(lambda: self.load_profile_dialog(auto_apply=False))
+
+        act_flash_file = self.profiles_menu.addAction("⚡ Wczytaj plik i wgraj od razu do klawiatury...")
+        act_flash_file.triggered.connect(lambda: self.load_profile_dialog(auto_apply=True))
+
+        self.btn_profiles_menu.setMenu(self.profiles_menu)
+        header_layout.addWidget(self.btn_profiles_menu)
 
         self.btn_refresh_dev = QPushButton("🔄 Odśwież")
         self.btn_refresh_dev.setToolTip("Odśwież połączenie z klawiaturą")
@@ -1539,33 +1849,86 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
+        # 1. Profile & File Persistence Management Card
+        prof_card = QFrame()
+        prof_card.setObjectName("cardFrame")
+        prof_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        prof_vbox = QVBoxLayout(prof_card)
+        prof_vbox.setContentsMargins(12, 12, 12, 12)
+        prof_vbox.setSpacing(8)
+
+        lbl_prof_title = QLabel("💾 Zarządzanie Plikami Konfiguracji & Kopia Zapasowa (Profiles)")
+        lbl_prof_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #7aa2f7;")
+        prof_vbox.addWidget(lbl_prof_title)
+
+        lbl_prof_desc = QLabel(
+            "Zapisuj całe układy do plików na dysku, twórz kopie zapasowe, przenoś profile między komputerami "
+            "oraz wgrywaj przygotowane pliki konfiguracyjne (.json / .txt) bezpośrednio do pamięci mikrokontrolera."
+        )
+        lbl_prof_desc.setWordWrap(True)
+        lbl_prof_desc.setStyleSheet("color: #a9b1d6; font-size: 11px;")
+        prof_vbox.addWidget(lbl_prof_desc)
+
+        btn_prof_row = QHBoxLayout()
+        btn_prof_row.setSpacing(8)
+
+        btn_mgr = QPushButton("📋 Otwórz Menedżer Profili...")
+        btn_mgr.setObjectName("primaryBtn")
+        btn_mgr.setStyleSheet("min-height: 26px; padding: 6px 14px;")
+        btn_mgr.clicked.connect(self.open_profile_manager)
+        btn_prof_row.addWidget(btn_mgr)
+
+        btn_save_json = QPushButton("💾 Zapisz profil (.json)...")
+        btn_save_json.setStyleSheet("min-height: 26px; padding: 6px 12px;")
+        btn_save_json.clicked.connect(lambda: self.save_profile_dialog(default_type="json"))
+        btn_prof_row.addWidget(btn_save_json)
+
+        btn_save_txt = QPushButton("📄 Zapisz kod sprzętowy (.txt)...")
+        btn_save_txt.setStyleSheet("min-height: 26px; padding: 6px 12px;")
+        btn_save_txt.clicked.connect(self.export_raw_config_dialog)
+        btn_prof_row.addWidget(btn_save_txt)
+
+        btn_load_file = QPushButton("📂 Wczytaj plik (.json / .txt)...")
+        btn_load_file.setStyleSheet("min-height: 26px; padding: 6px 12px;")
+        btn_load_file.clicked.connect(lambda: self.load_profile_dialog(auto_apply=False))
+        btn_prof_row.addWidget(btn_load_file)
+
+        btn_flash_file = QPushButton("⚡ Wgraj plik do klawiatury...")
+        btn_flash_file.setObjectName("successBtn")
+        btn_flash_file.setStyleSheet("min-height: 26px; padding: 6px 12px;")
+        btn_flash_file.clicked.connect(lambda: self.load_profile_dialog(auto_apply=True))
+        btn_prof_row.addWidget(btn_flash_file)
+
+        btn_prof_row.addStretch()
+        prof_vbox.addLayout(btn_prof_row)
+        layout.addWidget(prof_card)
+
+        # 2. Hardware UserData Preview Card
         card = QFrame()
         card.setObjectName("cardFrame")
         card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         card_vbox = QVBoxLayout(card)
-        card_vbox.setContentsMargins(10, 10, 10, 10)
+        card_vbox.setContentsMargins(12, 12, 12, 12)
         card_vbox.setSpacing(8)
 
-        card_vbox.addWidget(QLabel("Podgląd wygenerowanej konfiguracji sprzętowej GK6X UserData:"))
+        card_vbox.addWidget(QLabel("📝 Podgląd generowanego pliku konfiguracji sprzętowej GK6X UserData:"))
 
         self.debug_code_text = QPlainTextEdit()
         self.debug_code_text.setReadOnly(True)
-        self.debug_code_text.setMinimumHeight(380)
+        self.debug_code_text.setMinimumHeight(320)
         self.debug_code_text.setStyleSheet("font-family: monospace; font-size: 11px; background-color: #13141c; color: #a9b1d6;")
         card_vbox.addWidget(self.debug_code_text)
 
         btn_row = QHBoxLayout()
-        btn_refresh_code = QPushButton("🔄 Odśwież kod")
+        btn_refresh_code = QPushButton("🔄 Odśwież podgląd kodu")
         btn_refresh_code.clicked.connect(self.refresh_debug_code_view)
         btn_row.addWidget(btn_refresh_code)
 
-        btn_export = QPushButton("💾 Eksportuj profil do pliku JSON...")
-        btn_export.clicked.connect(self.export_profile_json)
-        btn_row.addWidget(btn_export)
+        btn_apply_from_preview = QPushButton("⚡ Wgraj tę konfigurację do klawiatury")
+        btn_apply_from_preview.setObjectName("primaryBtn")
+        btn_apply_from_preview.clicked.connect(self.apply_full_configuration)
+        btn_row.addWidget(btn_apply_from_preview)
 
-        btn_import = QPushButton("📂 Importuj profil z pliku JSON...")
-        btn_import.clicked.connect(self.import_profile_json)
-        btn_row.addWidget(btn_import)
         btn_row.addStretch()
         card_vbox.addLayout(btn_row)
 
@@ -2385,35 +2748,166 @@ class MainWindow(QMainWindow):
         code = self.backend.generate_full_config()
         self.debug_code_text.setPlainText(code)
 
+    def open_profile_manager(self):
+        """Open the interactive profile and configuration file manager dialog."""
+        dlg = ProfileManagerDialog(self.backend, main_window=self)
+        dlg.exec()
+        self.refresh_debug_code_view()
+
+    def save_profile_dialog(self, default_type: str = "json"):
+        """Save active configuration to a user-chosen file (JSON profile or GK6X UserData .txt)."""
+        if default_type == "txt":
+            fname, _ = QFileDialog.getSaveFileName(
+                self,
+                "Zapisz plik konfiguracji sprzętowej UserData",
+                f"{self.backend.current_model_id}.txt",
+                "Plik UserData TXT (*.txt);;Wszystkie pliki (*)"
+            )
+            if fname:
+                self.backend.export_raw_config(fname)
+                self.lbl_bottom_info.setText(f"💾 Wyeksportowano plik UserData do: {fname}")
+                QMessageBox.information(
+                    self,
+                    "Zapisano plik UserData",
+                    f"Pomyślnie zapisano plik konfiguracji sprzętowej do:\n{fname}\n\n"
+                    f"Plik ten zawiera pełne definicje kodów GK6X dla modelu {self.backend.current_model_id}."
+                )
+        else:
+            fname, _ = QFileDialog.getSaveFileName(
+                self,
+                "Zapisz profil konfiguracji",
+                "gk104_profile.json",
+                "Profil JSON (*.json);;Profil GK (*.gkprofile);;Wszystkie pliki (*)"
+            )
+            if fname:
+                self.backend.save_profile(fname)
+                self.lbl_bottom_info.setText(f"💾 Zapisano profil do: {fname}")
+                QMessageBox.information(
+                    self,
+                    "Zapisano profil",
+                    f"Pomyślnie zapisano profil konfiguracji do:\n{fname}\n\n"
+                    f"Zawiera on wszystkie mapowania klawiszy, pokręteł, makra oraz ustawienia podświetlenia."
+                )
+
+    def export_raw_config_dialog(self):
+        """Export the compiled hardware UserData txt configuration."""
+        self.save_profile_dialog(default_type="txt")
+
+    def load_profile_dialog(self, auto_apply: bool = False):
+        """Open file chooser to load JSON profile or GK6X UserData .txt, with optional immediate flash."""
+        title = "Wczytaj plik i wgraj do klawiatury" if auto_apply else "Wczytaj plik profilu lub konfiguracji"
+        fname, _ = QFileDialog.getOpenFileName(
+            self,
+            title,
+            "",
+            "Pliki konfiguracji (*.json *.txt *.gkprofile);;Profil JSON (*.json *.gkprofile);;Plik UserData TXT (*.txt);;Wszystkie pliki (*)"
+        )
+        if fname and os.path.exists(fname):
+            ok, msg, _ = self.backend.load_any_config_file(fname)
+            if ok:
+                self.apply_loaded_state_to_ui()
+                if auto_apply:
+                    reply = QMessageBox.question(
+                        self,
+                        "Potwierdzenie wgrania do klawiatury",
+                        f"{msg}\n\nCzy chcesz teraz wgrać tę konfigurację bezpośrednio do pamięci Flash klawiatury?",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.Yes
+                    )
+                    if reply == QMessageBox.Yes:
+                        self.apply_full_configuration()
+                else:
+                    QMessageBox.information(
+                        self,
+                        "Wczytano konfigurację",
+                        f"{msg}\n\nUstawienia zostały pomyślnie załadowane do programu!"
+                    )
+            else:
+                QMessageBox.critical(self, "Błąd wczytywania", msg)
+
+    def apply_loaded_state_to_ui(self):
+        """Synchronize all GUI components with active backend state after loading a profile."""
+        self.space_mode = getattr(self.backend, "space_mode", "split")
+
+        # 1. Space mode radio buttons
+        for r in [self.rgb_radio_split_space, self.rgb_radio_single_space, self.remap_radio_split_space, self.remap_radio_single_space]:
+            r.blockSignals(True)
+        self.rgb_radio_split_space.setChecked(self.space_mode == "split")
+        self.rgb_radio_single_space.setChecked(self.space_mode == "standard")
+        self.remap_radio_split_space.setChecked(self.space_mode == "split")
+        self.remap_radio_single_space.setChecked(self.space_mode == "standard")
+        for r in [self.rgb_radio_split_space, self.rgb_radio_single_space, self.remap_radio_split_space, self.remap_radio_single_space]:
+            r.blockSignals(False)
+
+        # 2. Rebuild virtual keyboard visualizers
+        self.build_keyboard_grid(
+            self.rgb_grid_layout,
+            self.rgb_key_buttons,
+            self.on_rgb_key_clicked,
+            self.space_mode,
+            mode="rgb"
+        )
+        self.live_anim.buttons = self.rgb_key_buttons
+
+        self.build_keyboard_grid(
+            self.remap_grid_layout,
+            self.remap_key_buttons,
+            self.on_remap_key_selected,
+            self.space_mode,
+            mode="remap"
+        )
+
+        # 3. Synchronize lighting state & UI
+        bright_val = int(self.backend.lighting_config.get("brightness", 100))
+        self.brightness_slider.blockSignals(True)
+        self.brightness_slider.setValue(bright_val)
+        self.brightness_slider.blockSignals(False)
+        self.lbl_brightness_val.setText(f"Jasność: {bright_val}%")
+        self.live_anim.set_brightness(bright_val)
+
+        mode = self.backend.lighting_config.get("mode", "preset")
+        if mode == "preset":
+            p_name = self.backend.lighting_config.get("preset_name", "Spectral Cycle")
+            self.live_anim.set_preset(p_name)
+            for i in range(self.effects_list_widget.count()):
+                item = self.effects_list_widget.item(i)
+                if item.data(Qt.UserRole) == p_name:
+                    self.effects_list_widget.blockSignals(True)
+                    self.effects_list_widget.setCurrentItem(item)
+                    self.effects_list_widget.blockSignals(False)
+                    break
+        elif mode == "static":
+            static_colors = self.backend.lighting_config.get("static_colors", {})
+            for kid, color in static_colors.items():
+                if kid in self.rgb_key_buttons:
+                    self.rgb_key_buttons[kid].set_color(color)
+        elif mode == "off":
+            self.live_anim.set_preset(None)
+            for btn in self.rgb_key_buttons.values():
+                btn.set_color("#000000")
+
+        # 4. Refresh Remap UI (Layer, Keys, Knobs)
+        self.refresh_remap_ui()
+
+        # 5. Refresh Macro Studio UI
+        self.refresh_macro_list_ui()
+
+        # 6. Refresh Debug Code View
+        self.refresh_debug_code_view()
+
+        remaps_count = sum(len(m) for m in self.backend.remaps.values())
+        macros_count = len(self.backend.macros)
+        self.lbl_bottom_info.setText(
+            f"✅ Wczytano konfigurację ({remaps_count} zremapowanych klawiszy/pokręteł, {macros_count} makr, tryb: {self.space_mode})."
+        )
+
     def export_profile_json(self):
-        fname, _ = QFileDialog.getSaveFileName(self, "Zapisz profil", "gk104_profile.json", "JSON (*.json)")
-        if fname:
-            self.backend.save_profile(fname)
-            QMessageBox.information(self, "Eksport", f"Zapisano profil do: {fname}")
+        """Legacy helper for exporting JSON profile."""
+        self.save_profile_dialog(default_type="json")
 
     def import_profile_json(self):
-        fname, _ = QFileDialog.getOpenFileName(self, "Wczytaj profil", "", "JSON (*.json)")
-        if fname and os.path.exists(fname):
-            self.backend.load_profile(fname)
-            self.space_mode = getattr(self.backend, "space_mode", "split")
-            self.build_keyboard_grid(
-                self.rgb_grid_layout,
-                self.rgb_key_buttons,
-                self.on_rgb_key_clicked,
-                self.space_mode,
-                mode="rgb"
-            )
-            self.live_anim.buttons = self.rgb_key_buttons
-            self.build_keyboard_grid(
-                self.remap_grid_layout,
-                self.remap_key_buttons,
-                self.on_remap_key_selected,
-                self.space_mode,
-                mode="remap"
-            )
-            self.refresh_remap_ui()
-            self.refresh_macro_list_ui()
-            QMessageBox.information(self, "Import", f"Wczytano profil z: {fname}")
+        """Legacy helper for importing JSON/TXT profile."""
+        self.load_profile_dialog(auto_apply=False)
 
     # =========================================================================
     # BRIGHTNESS & KNOB HELPERS

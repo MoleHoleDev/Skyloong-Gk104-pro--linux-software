@@ -75,11 +75,19 @@ Zaawansowana, natywna aplikacja graficzna w **Pythonie (PySide6)** stworzona dla
 
 ---
 
-### 5. 🚀 Zapis do Pamięci Klawiatury & Profile
-- **Przycisk "Wgraj do klawiatury" (Apply):** Generuje spójną konfigurację łączącą makra, remapy, pokrętła i oświetlenie, a następnie zapisuje je w trwałej pamięci Flash kontrolera GK104 Pro.
+### 5. 📁 Zapisywanie, Wczytywanie & Menedżer Profili Konfiguracji
+- **Menedżer Profili (`📁 Profile & Pliki`):**
+  - Dedykowane okno zarządzania zapisanymi profilami i kopiami zapasowymi w `~/.config/skyloong_studio/profiles/`.
+  - Możliwość wczytywania profili do edytora lub bezpośredniego programowania klawiatury jednym kliknięciem (Flash).
+- **Zapisywanie i eksport konfiguracji:**
+  - **Zapis profilu JSON (.json / .gkprofile):** Kompletna kopia zapasowa wszystkich ustawień (remapowania, pokrętła, makra, kolory i efekty RGB, tryb spacji).
+  - **Zapis kodu sprzętowego (.txt UserData):** Eksport wygenerowanego pliku konfiguracji GK6X UserData bezpośrednio wrzucanego do mikrokontrolera.
+- **Wczytywanie i import konfiguracji:**
+  - Inteligentne, uniwersalne rozpoznawanie i wczytywanie plików `.json` oraz `.txt` (UserData) z dowolnego miejsca na dysku.
+  - Automatyczna synchronizacja całego interfejsu (wirtualnej klawiatury, suwaka jasności, palet RGB, tabeli makr i pokręteł).
+- **Przycisk "Wgraj do klawiatury" (Apply):** Kompiluje bieżący stan i programuje trwałą pamięć Flash kontrolera GK104 Pro.
 - **Zabezpieczenie bufora sprzętowego:** Automatyczna walidacja długości makr zapobiegająca błędom kontrolera.
 - **Reset do ustawień fabrycznych (Unmap):** Przywraca fabryczny stan układu klawiszy.
-- **Eksport & Import profili JSON:** Zapisywanie kopii zapasowej całej konfiguracji do pliku i łatwe przenoszenie między profilami.
 - **Automatyczna pamięć:** Wszystkie ustawienia zapisują się lokalnie w `~/.config/skyloong_studio/profile.json`.
 
 ---
