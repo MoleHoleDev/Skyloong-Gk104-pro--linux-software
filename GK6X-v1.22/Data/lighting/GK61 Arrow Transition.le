@@ -1,0 +1,379 @@
+{
+    
+   "Frames" : [
+        
+      {
+            
+         "Count" : 1,
+            
+         "Data" : {
+                
+            "0" : "0xffffff",
+                
+            "2" : "0xffffff",
+                
+            "22" : "0xffffff",
+                
+            "24" : "0xffffff",
+                
+            "44" : "0xffffff",
+                
+            "46" : "0xffffff",
+                
+            "66" : "0xffffff",
+                
+            "88" : "0xffffff",
+                
+            "89" : "0xffffff"
+         
+            },
+            
+         "Name" : "frame0"
+      
+        },
+        
+      {
+            
+         "Count" : 1,
+            
+         "Data" : {
+                
+            "25" : "0xffffff",
+                
+            "26" : "0xffffff",
+                
+            "3" : "0xffffff",
+                
+            "4" : "0xffffff",
+                
+            "47" : "0xffffff",
+                
+            "48" : "0xffffff",
+                
+            "68" : "0xffffff",
+                
+            "69" : "0xffffff",
+                
+            "89" : "0xffffff",
+                
+            "90" : "0xffffff"
+         
+            },
+            
+         "Name" : "frame1"
+      
+        },
+        
+      {
+            
+         "Count" : 1,
+            
+         "Data" : {
+                
+            "27" : "0xffffff",
+                
+            "28" : "0xffffff",
+                
+            "49" : "0xffffff",
+                
+            "5" : "0xffffff",
+                
+            "50" : "0xffffff",
+                
+            "6" : "0xffffff",
+                
+            "70" : "0xffffff",
+                
+            "71" : "0xffffff"
+         
+            },
+            
+         "Name" : "frame2"
+      
+        },
+        
+      {
+            
+         "Count" : 1,
+            
+         "Data" : {
+                
+            "29" : "0xffffff",
+                
+            "30" : "0xffffff",
+                
+            "51" : "0xffffff",
+                
+            "52" : "0xffffff",
+                
+            "7" : "0xffffff",
+                
+            "72" : "0xffffff",
+                
+            "73" : "0xffffff",
+                
+            "8" : "0xffffff",
+                
+            "94" : "0xffffff"
+         
+            },
+            
+         "Name" : "frame3"
+      
+        },
+        
+      {
+            
+         "Count" : 1,
+            
+         "Data" : {
+                
+            "10" : "0xffffff",
+                
+            "31" : "0xffffff",
+                
+            "32" : "0xffffff",
+                
+            "53" : "0xffffff",
+                
+            "54" : "0xffffff",
+                
+            "74" : "0xffffff",
+                
+            "75" : "0xffffff",
+                
+            "9" : "0xffffff"
+         
+            },
+            
+         "Name" : "frame4"
+      
+        },
+        
+      {
+            
+         "Count" : 1,
+            
+         "Data" : {
+                
+            "11" : "0xffffff",
+                
+            "12" : "0xffffff",
+                
+            "33" : "0xffffff",
+                
+            "34" : "0xffffff",
+                
+            "55" : "0xffffff",
+                
+            "56" : "0xffffff",
+                
+            "76" : "0xffffff",
+                
+            "77" : "0xffffff",
+                
+            "98" : "0xffffff",
+                
+            "99" : "0xffffff"
+         
+            },
+            
+         "Name" : "frame5"
+      
+        },
+        
+      {
+            
+         "Count" : 1,
+            
+         "Data" : {
+                
+            "100" : "0xffffff",
+                
+            "102" : "0xffffff",
+                
+            "13" : "0xffffff",
+                
+            "14" : "0xffffff",
+                
+            "35" : "0xffffff",
+                
+            "36" : "0xffffff",
+                
+            "58" : "0xffffff",
+                
+            "80" : "0xffffff"
+         
+            },
+            
+         "Name" : "frame6"
+      
+        }
+   
+    ],
+    
+   "GUID" : "96775CA3-3586-4a01-AAE8-1B9C3FE01D5E",
+    
+   "LEConfigs" : [
+        
+      {
+            
+         "Color" : "0x00FFEE",
+            
+         "Count" : 30,
+            
+         "Keys" : [
+                 0,
+                 22,
+                 44,
+                 66,
+                 88,
+                 24,
+                 46,
+                 2 
+            ],
+            
+         "Type" : 1
+      
+        },
+        
+      {
+            
+         "Color" : "0xFF0000",
+            
+         "Count" : 30,
+            
+         "Keys" : [
+                 3,
+                 4,
+                 25,
+                 26,
+                 47,
+                 48,
+                 68,
+                 69,
+                 89,
+                 90 
+            ],
+            
+         "Type" : 1
+      
+        },
+        
+      {
+            
+         "Color" : "0x00FF03",
+            
+         "Count" : 30,
+            
+         "Keys" : [
+                 5,
+                 6,
+                 27,
+                 28,
+                 49,
+                 50,
+                 70,
+                 71 
+            ],
+            
+         "Type" : 1
+      
+        },
+        
+      {
+            
+         "Color" : "0xDFFF00",
+            
+         "Count" : 30,
+            
+         "Keys" : [
+                 7,
+                 8,
+                 29,
+                 30,
+                 51,
+                 52,
+                 72,
+                 73,
+                 94 
+            ],
+            
+         "Type" : 1
+      
+        },
+        
+      {
+            
+         "Color" : "0x0014FF",
+            
+         "Count" : 30,
+            
+         "Keys" : [
+                 9,
+                 10,
+                 31,
+                 32,
+                 53,
+                 54,
+                 74,
+                 75 
+            ],
+            
+         "Type" : 1
+      
+        },
+        
+      {
+            
+         "Color" : "0xFF8B00",
+            
+         "Count" : 30,
+            
+         "Keys" : [
+                 12,
+                 11,
+                 33,
+                 34,
+                 55,
+                 56,
+                 76,
+                 77,
+                 98,
+                 99 
+            ],
+            
+         "Type" : 1
+      
+        },
+        
+      {
+            
+         "Color" : "0x9A00FF",
+            
+         "Count" : 30,
+            
+         "Keys" : [
+                 13,
+                 14,
+                 35,
+                 36,
+                 58,
+                 80,
+                 100,
+                 102 
+            ],
+            
+         "Type" : 1
+      
+        }
+   
+    ],
+    
+   "LeCate" : 611,
+    
+   "LeType" : "simple",
+    
+   "Name" : "GK61箭头过渡"
+
+}

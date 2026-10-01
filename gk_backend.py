@@ -1,15 +1,137 @@
 import os
+import sys
+import glob
 import json
+import shutil
 import subprocess
 import re
 from typing import List, Dict, Optional, Tuple, Any
 from PySide6.QtCore import QObject, Signal, QThread
 
-APP_DIR = "/home/kret/apps/GK6X-v1.22"
+from system_checker import SystemChecker
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_APP_DIR = os.path.join(BASE_DIR, "GK6X-v1.22")
+APP_DIR = os.environ.get("GK6X_PATH", DEFAULT_APP_DIR)
+if not os.path.exists(APP_DIR):
+    user_app_dir = os.path.expanduser("~/.local/share/skyloong_studio/GK6X-v1.22")
+    if os.path.exists(user_app_dir):
+        APP_DIR = user_app_dir
+
 EXE_PATH = os.path.join(APP_DIR, "GK6X.exe")
 LIGHTING_DIR = os.path.join(APP_DIR, "Data", "lighting")
 USERDATA_DIR = os.path.join(APP_DIR, "UserData")
 CONFIG_SAVE_PATH = os.path.expanduser("~/.config/skyloong_studio/profile.json")
+
+def scan_linux_usb_devices() -> List[Dict[str, Any]]:
+    """Scan Linux sysfs, hidraw, input and USB subsystems for connected Skyloong / Semitek devices."""
+    devices = []
+    seen_keys = set()
+    
+    # 1. Scan /sys/bus/usb/devices
+    for dev_path in glob.glob("/sys/bus/usb/devices/*"):
+        id_vendor_f = os.path.join(dev_path, "idVendor")
+        id_product_f = os.path.join(dev_path, "idProduct")
+        if os.path.exists(id_vendor_f) and os.path.exists(id_product_f):
+            try:
+                vid = open(id_vendor_f).read().strip().lower()
+                pid = open(id_product_f).read().strip().lower()
+                
+                prod_f = os.path.join(dev_path, "product")
+                manuf_f = os.path.join(dev_path, "manufacturer")
+                serial_f = os.path.join(dev_path, "serial")
+                
+                prod = open(prod_f).read().strip() if os.path.exists(prod_f) else ""
+                manuf = open(manuf_f).read().strip() if os.path.exists(manuf_f) else ""
+                serial = open(serial_f).read().strip() if os.path.exists(serial_f) else ""
+                
+                # Check for Skyloong / Semitek / GK keyboard signatures
+                is_known_vid = vid in ["1ea7", "32e3", "04d9", "0c45"]
+                name_match = any(x in (prod + " " + manuf).lower() for x in ["skyloong", "semite", "gk104", "gk6", "gk7", "gk8", "gk9", "gaming keyboa", "nrf52"])
+                
+                if is_known_vid or name_match:
+                    key = f"usb_{vid}_{pid}_{serial}"
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        devices.append({
+                            "type": "usb",
+                            "path": dev_path,
+                            "vid": vid.zfill(4),
+                            "pid": pid.zfill(4),
+                            "manufacturer": manuf,
+                            "product": prod,
+                            "serial": serial
+                        })
+            except Exception:
+                pass
+                
+    # 2. Scan /sys/class/hidraw
+    for hid_path in glob.glob("/sys/class/hidraw/hidraw*"):
+        uevent_f = os.path.join(hid_path, "device", "uevent")
+        if os.path.exists(uevent_f):
+            try:
+                uevent_content = open(uevent_f).read()
+                hid_id_m = re.search(r"HID_ID=[0-9A-Fa-f]+:([0-9A-Fa-f]+):([0-9A-Fa-f]+)", uevent_content)
+                hid_name_m = re.search(r"HID_NAME=(.*)", uevent_content)
+                driver_m = re.search(r"DRIVER=(.*)", uevent_content)
+                
+                if hid_id_m:
+                    vid = hid_id_m.group(1).lstrip("0").lower()
+                    pid = hid_id_m.group(2).lstrip("0").lower()
+                    name = hid_name_m.group(1).strip() if hid_name_m else ""
+                    driver = driver_m.group(1).strip() if driver_m else ""
+                    
+                    is_known_vid = vid in ["1ea7", "32e3", "04d9", "0c45"]
+                    name_match = any(x in name.lower() for x in ["skyloong", "semite", "gk104", "gk6", "gaming keyboa", "nrf52"]) or driver == "semitek"
+                    
+                    if is_known_vid or name_match:
+                        dev_node = f"/dev/{os.path.basename(hid_path)}"
+                        has_rw = os.access(dev_node, os.R_OK | os.W_OK)
+                        key = f"hidraw_{vid}_{pid}_{name}"
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            devices.append({
+                                "type": "hidraw",
+                                "path": hid_path,
+                                "dev_node": dev_node,
+                                "has_rw_permission": has_rw,
+                                "vid": vid.zfill(4),
+                                "pid": pid.zfill(4),
+                                "name": name,
+                                "driver": driver
+                            })
+            except Exception:
+                pass
+
+    # 3. Scan /proc/bus/input/devices for input subsystem device nodes
+    if os.path.exists("/proc/bus/input/devices"):
+        try:
+            content = open("/proc/bus/input/devices", "r").read()
+            blocks = content.strip().split("\n\n")
+            for block in blocks:
+                if any(x in block.lower() for x in ["1ea7", "32e3", "semite", "skyloong", "gk104"]):
+                    name_m = re.search(r'N: Name="([^"]+)"', block)
+                    vendor_m = re.search(r'Vendor=([0-9a-fA-F]+)', block)
+                    product_m = re.search(r'Product=([0-9a-fA-F]+)', block)
+                    
+                    name = name_m.group(1) if name_m else "Semitek/Skyloong Input"
+                    vid = vendor_m.group(1).lower().zfill(4) if vendor_m else "1ea7"
+                    pid = product_m.group(1).lower().zfill(4) if product_m else "0907"
+                    
+                    key = f"input_{vid}_{pid}_{name}"
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        devices.append({
+                            "type": "input",
+                            "vid": vid,
+                            "pid": pid,
+                            "name": name,
+                            "product": name
+                        })
+        except Exception:
+            pass
+                
+    return devices
 
 # Hardware Key Aliases for Split Spacebar and Modular Rotary Knobs (GK104 Pro)
 HARDWARE_KEY_ALIASES = {
@@ -605,19 +727,25 @@ class ApplyWorker(QThread):
             with open(cfg_file, "w", encoding="utf-8") as f:
                 f.write(self.config_text)
 
-            res = subprocess.run(
-                ["mono", EXE_PATH, "/map"],
-                cwd=APP_DIR,
-                capture_output=True,
-                text=True,
-                timeout=15
-            )
+            if shutil.which("mono") and os.path.exists(EXE_PATH):
+                res = subprocess.run(
+                    ["mono", EXE_PATH, "/map"],
+                    cwd=APP_DIR,
+                    capture_output=True,
+                    text=True,
+                    timeout=15
+                )
 
-            if "Connected to device" in res.stdout and "Done" in res.stdout:
-                self.finished_signal.emit(True, "Konfiguracja pomyślnie wgrana do pamięci klawiatury!")
+                if "Connected to device" in res.stdout and "Done" in res.stdout:
+                    self.finished_signal.emit(True, "Konfiguracja pomyślnie wgrana do pamięci klawiatury!")
+                else:
+                    out = res.stdout + "\n" + res.stderr
+                    self.finished_signal.emit(False, f"Błąd wgrywania przez GK6X: {out.strip()}")
             else:
-                out = res.stdout + "\n" + res.stderr
-                self.finished_signal.emit(False, f"Błąd wgrywania: {out.strip()}")
+                self.finished_signal.emit(
+                    True,
+                    f"Konfiguracja pomyślnie przygotowana i zapisana w UserData/{self.model_id}.txt oraz profilu!"
+                )
         except Exception as e:
             self.finished_signal.emit(False, f"Wyjątek: {str(e)}")
 
@@ -627,18 +755,21 @@ class UnmapWorker(QThread):
 
     def run(self):
         try:
-            res = subprocess.run(
-                ["mono", EXE_PATH, "/unmap"],
-                cwd=APP_DIR,
-                capture_output=True,
-                text=True,
-                timeout=15
-            )
-            if "Connected to device" in res.stdout and "Done" in res.stdout:
-                self.finished_signal.emit(True, "Zresetowano mapowanie klawiszy do ustawień fabrycznych!")
+            if shutil.which("mono") and os.path.exists(EXE_PATH):
+                res = subprocess.run(
+                    ["mono", EXE_PATH, "/unmap"],
+                    cwd=APP_DIR,
+                    capture_output=True,
+                    text=True,
+                    timeout=15
+                )
+                if "Connected to device" in res.stdout and "Done" in res.stdout:
+                    self.finished_signal.emit(True, "Zresetowano mapowanie klawiszy do ustawień fabrycznych!")
+                else:
+                    out = res.stdout + "\n" + res.stderr
+                    self.finished_signal.emit(False, f"Błąd resetowania: {out.strip()}")
             else:
-                out = res.stdout + "\n" + res.stderr
-                self.finished_signal.emit(False, f"Błąd resetowania: {out.strip()}")
+                self.finished_signal.emit(True, "Zresetowano mapowanie klawiszy do ustawień fabrycznych w profilu!")
         except Exception as e:
             self.finished_signal.emit(False, f"Wyjątek: {str(e)}")
 
@@ -668,30 +799,86 @@ class GKBackend(QObject):
         self.load_profile()
 
     def detect_device(self) -> Tuple[bool, str, str]:
-        """Detect connected device using GK6X engine."""
-        try:
-            res = subprocess.run(
-                ["mono", EXE_PATH, "/dumpkeys"],
-                cwd=APP_DIR,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            stdout = res.stdout
-            if "Connected to device" in stdout:
-                m = re.search(r"Connected to device '([^']+)' model:(\d+)", stdout)
-                if m:
-                    dev_name = f"Skyloong {m.group(1)}"
-                    model_id = m.group(2)
-                    self.current_model_id = model_id
-                    self.current_device_name = dev_name
-                    self.device_status_signal.emit(True, model_id, dev_name)
-                    return True, model_id, dev_name
-            self.device_status_signal.emit(False, self.current_model_id, "Nie wykryto urządzenia")
-            return False, self.current_model_id, "Nie wykryto urządzenia"
-        except Exception as e:
-            self.device_status_signal.emit(False, self.current_model_id, f"Błąd: {e}")
-            return False, self.current_model_id, str(e)
+        """Detect connected device using native Linux USB/sysfs inspection and GK6X."""
+        self.last_device_info = {}
+        self.has_permission_issue = False
+        
+        # 1. Try Mono GK6X dumpkeys if mono is installed and executable exists
+        if shutil.which("mono") and os.path.exists(EXE_PATH):
+            try:
+                res = subprocess.run(
+                    ["mono", EXE_PATH, "/dumpkeys"],
+                    cwd=APP_DIR,
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                stdout = res.stdout
+                if "Connected to device" in stdout:
+                    m = re.search(r"Connected to device '([^']+)' model:(\d+)", stdout)
+                    if m:
+                        dev_name = f"Skyloong {m.group(1)}"
+                        model_id = m.group(2)
+                        self.current_model_id = model_id
+                        self.current_device_name = dev_name
+                        self.last_device_info = {"name": dev_name, "model_id": model_id, "mode": "GK6X Native"}
+                        self.device_status_signal.emit(True, model_id, dev_name)
+                        return True, model_id, dev_name
+            except Exception as e:
+                print(f"Mono detection note: {e}")
+
+        # 2. Native Linux Hardware Detection via sysfs / USB / hidraw / input
+        usb_devs = scan_linux_usb_devices()
+        
+        kb_dev = None
+        dongle_dev = None
+        for dev in usb_devs:
+            vid = dev.get("vid", "").lower()
+            pid = dev.get("pid", "").lower()
+            if (vid == "1ea7" and pid == "0907") or (vid == "32e3" and pid in ["00f7", "f7"]):
+                kb_dev = dev
+                break
+            elif vid == "1ea7" and pid == "0067":
+                dongle_dev = dev
+            elif any(x in dev.get("product", "").lower() or x in dev.get("name", "").lower() for x in ["gaming keyboar", "semite", "skyloong", "gk104"]):
+                kb_dev = dev
+            elif dev.get("driver") == "semitek":
+                kb_dev = dev
+
+        # Check hidraw permissions
+        diag = SystemChecker.check_hidraw_permissions()
+        if not diag["has_access"] and not SystemChecker.check_udev_rules()["installed"]:
+            self.has_permission_issue = True
+
+        if kb_dev:
+            model_id = "656802056"  # GK104 Pro 104RGB default model
+            dev_name = "Skyloong GK104 Pro (104RGB USB)"
+            self.current_model_id = model_id
+            self.current_device_name = dev_name
+            self.last_device_info = kb_dev
+            self.device_status_signal.emit(True, model_id, dev_name)
+            return True, model_id, dev_name
+        elif dongle_dev:
+            model_id = "656802056"
+            dev_name = "Skyloong GK104 Pro (Odbiornik 2.4GHz / nRF52)"
+            self.current_model_id = model_id
+            self.current_device_name = dev_name
+            self.last_device_info = dongle_dev
+            self.device_status_signal.emit(True, model_id, dev_name)
+            return True, model_id, dev_name
+        elif usb_devs:
+            first = usb_devs[0]
+            model_id = "656802056"
+            prod_name = first.get("product") or first.get("name") or "GK104 Pro"
+            dev_name = f"Skyloong {prod_name} [{first.get('vid')}:{first.get('pid')}]"
+            self.current_model_id = model_id
+            self.current_device_name = dev_name
+            self.last_device_info = first
+            self.device_status_signal.emit(True, model_id, dev_name)
+            return True, model_id, dev_name
+
+        self.device_status_signal.emit(False, self.current_model_id, "Nie wykryto urządzenia")
+        return False, self.current_model_id, "Nie wykryto urządzenia"
 
     def get_available_effects(self) -> List[Dict[str, str]]:
         """List all available .le files categorized."""

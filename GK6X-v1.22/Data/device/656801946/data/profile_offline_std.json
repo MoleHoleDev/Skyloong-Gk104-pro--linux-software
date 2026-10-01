@@ -1,0 +1,28 @@
+{
+	"GUID": "",
+	"ModeIndex": 1,
+	"Name": "标准配置",
+	"Active": 0,
+	"DriverLE": [
+	{
+        	"GUID": "41E19459-784C-4564-9C10-B6D9BA9C6E83",
+        	"Name": "GK84/S 光谱循环"
+    	},
+	{
+		"GUID": "4B193D50-EF01-4617-8E7C-8552290EDE76",
+		"Name": "Macice Blue"
+	},
+	{
+		"GUID": "014D58A9-7E44-43c7-BA92-1063623B02DD",
+		"Name": "RGB渐变"
+	},
+
+	{
+     	        "GUID": "14BC0DEE-E7DA-4896-873D-38CA669D34C6",
+      	        "Name": "GK84/S 风车"
+   	},
+	{
+		"GUID": "B09FC694-4B0E-4fcb-83E7-8EB4A77E566A",
+		"Name": "彩虹波"
+	}]
+}

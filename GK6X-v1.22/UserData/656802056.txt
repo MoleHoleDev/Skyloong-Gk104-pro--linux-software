@@ -1,0 +1,56 @@
+# ==========================
+# KEY ALIASES (GK104 Pro Knobs & Split Space)
+# ==========================
+[KeyAlias]
+LeftSpace:Space_17
+StandardSpace:Space_18
+RightSpace:Space_19
+Knob1_CW:Space
+Knob1_CCW:Space_2
+Knob1_Click:Space_3
+Knob2_CCW:Space_4
+Knob2_CW:Space_5
+Knob2_Click:Space_6
+Knob3_CCW:Space_7
+Knob3_CW:Space_8
+Knob3_Click:Space_9
+Knob4_CW:Space_10
+Knob4_CCW:Space_11
+Knob4_Click:Space_12
+Knob5_CW:Space_13
+Knob5_CCW:Space_14
+Knob5_Click:Space_15
+Knob6_CW:OpenMediaPlayer
+Knob6_CCW:VolumeDown
+Knob6_Click:Space_16
+
+# ==========================
+# MACROS DEFINITIONS
+# ==========================
+[Macro(QuickCopyPaste,20,RepeatXTimes,1)]
+Press:LCtrl+C:50
+Press:Right:20
+Press:Enter:20
+Press:LCtrl+V:20
+
+[Macro(TaskManager,0,RepeatXTimes,1)]
+Press:LCtrl+LShift+Escape
+
+# ==========================
+# KEY REMAPPINGS
+# ==========================
+[Layer1]
+Knob1_CW:VolumeUp
+Knob1_CCW:VolumeDown
+Knob1_Click:VolumeMute
+Knob4_CW:PageDown
+Knob4_CCW:PageUp
+Knob4_Click:Enter
+
+# ==========================
+# LIGHTING CONFIGURATION
+# ==========================
+[Lighting(CustomGUIStatic,Base)]
+[Lighting(CustomGUIStatic,Layer1)]
+[Lighting(CustomGUIStatic,Layer2)]
+[Lighting(CustomGUIStatic,Layer3)]
