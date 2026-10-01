@@ -125,6 +125,21 @@ KNOB_PRESETS = {
         "CCW": "MediaPrevious",
         "Click": "MediaPlayPause"
     },
+    "💡 Jasność Podświetlenia (Backlight)": {
+        "CW": "0x09020001",
+        "CCW": "0x09020002",
+        "Click": "0x09060002"
+    },
+    "✨ Szybkość Animacji LED (Speed)": {
+        "CW": "0x09030001",
+        "CCW": "0x09030002",
+        "Click": "0x09060001"
+    },
+    "🌈 Przełączanie Profili LED (Effects)": {
+        "CW": "0x09010010",
+        "CCW": "0x09010010",
+        "Click": "0x09060002"
+    },
     "Przeglądarka WWW (Browser Nav)": {
         "CW": "BrowserForward",
         "CCW": "BrowserBack",
@@ -276,9 +291,9 @@ AVAILABLE_LAYERS = [
     ("FnLayer3", "Warstwa Fn + 3 (FnLayer3)")
 ]
 
-# Categorized target keys for remapping
+# Categorized target keys for remapping and macros (aligned with official Skyloong software categories)
 TARGET_KEY_CATEGORIES = {
-    "Podstawowe (Alfanumeryczne)": [
+    "⌨️ Primary (Klawisze Główne)": [
         ("A", "Litera A"), ("B", "Litera B"), ("C", "Litera C"), ("D", "Litera D"),
         ("E", "Litera E"), ("F", "Litera F"), ("G", "Litera G"), ("H", "Litera H"),
         ("I", "Litera I"), ("J", "Litera J"), ("K", "Litera K"), ("L", "Litera L"),
@@ -292,17 +307,7 @@ TARGET_KEY_CATEGORIES = {
         ("BackTick", "Znak ` (Backtick)"), ("Subtract", "Znak - (Minus)"), ("Add", "Znak = (Równa się)"),
         ("OpenSquareBrace", "Znak ["), ("CloseSquareBrace", "Znak ]"), ("Backslash", "Znak \\"),
         ("Semicolon", "Znak ; (Średnik)"), ("Quotes", "Znak ' (Apostrof)"),
-        ("Comma", "Znak , (Przecinek)"), ("Period", "Znak . (Kropka)"), ("Slash", "Znak / (Ukośnik)")
-    ],
-    "Klawisze Funkcyjne (F1 - F24)": [
-        ("F1", "F1"), ("F2", "F2"), ("F3", "F3"), ("F4", "F4"),
-        ("F5", "F5"), ("F6", "F6"), ("F7", "F7"), ("F8", "F8"),
-        ("F9", "F9"), ("F10", "F10"), ("F11", "F11"), ("F12", "F12"),
-        ("F13", "F13"), ("F14", "F14"), ("F15", "F15"), ("F16", "F16"),
-        ("F17", "F17"), ("F18", "F18"), ("F19", "F19"), ("F20", "F20"),
-        ("F21", "F21"), ("F22", "F22"), ("F23", "F23"), ("F24", "F24")
-    ],
-    "Nawigacja i Sterowanie": [
+        ("Comma", "Znak , (Przecinek)"), ("Period", "Znak . (Kropka)"), ("Slash", "Znak / (Ukośnik)"),
         ("Esc", "Escape (Esc)"), ("Tab", "Tabulator (Tab)"), ("CapsLock", "Caps Lock"),
         ("Backspace", "Backspace"), ("Enter", "Enter"), ("Space", "Spacja (Space)"),
         ("LeftSpace", "Lewa Spacja (Left Space)"), ("RightSpace", "Prawa Spacja (Right Space)"),
@@ -311,17 +316,16 @@ TARGET_KEY_CATEGORIES = {
         ("PageUp", "Page Up (PgUp)"), ("PageDown", "Page Down (PgDn)"),
         ("Up", "Strzałka w górę (▲)"), ("Down", "Strzałka w dół (▼)"),
         ("Left", "Strzałka w lewo (◄)"), ("Right", "Strzałka w prawo (►)"),
-        ("Screenshot", "Print Screen (Zrzut ekranu)"),
-        ("ScrollLock", "Scroll Lock"), ("Pause", "Pause / Break")
-    ],
-    "Modyfikatory": [
+        ("F1", "F1"), ("F2", "F2"), ("F3", "F3"), ("F4", "F4"),
+        ("F5", "F5"), ("F6", "F6"), ("F7", "F7"), ("F8", "F8"),
+        ("F9", "F9"), ("F10", "F10"), ("F11", "F11"), ("F12", "F12"),
         ("LCtrl", "Lewy Control (LCtrl)"), ("RCtrl", "Prawy Control (RCtrl)"),
         ("LShift", "Lewy Shift (LShift)"), ("RShift", "Prawy Shift (RShift)"),
         ("LAlt", "Lewy Alt (LAlt)"), ("RAlt", "Prawy Alt / AltGr (RAlt)"),
-        ("LWin", "Lewy Klawisz Windows (LWin)"), ("RWin", "Prawy Klawisz Windows (RWin)"),
+        ("LWin", "Lewy Win (LWin)"), ("RWin", "Prawy Win (RWin)"),
         ("Menu", "Menu kontekstowe (App/Menu)")
     ],
-    "Klawiatura Numeryczna (NumPad)": [
+    "🔢 Number Pad (Klawiatura Numeryczna)": [
         ("NumLock", "Num Lock"),
         ("NumPad0", "Num 0"), ("NumPad1", "Num 1"), ("NumPad2", "Num 2"),
         ("NumPad3", "Num 3"), ("NumPad4", "Num 4"), ("NumPad5", "Num 5"),
@@ -331,7 +335,7 @@ TARGET_KEY_CATEGORIES = {
         ("NumPadMultiply", "Num * (Mnożenie)"), ("NumPadSlash", "Num / (Dzielenie)"),
         ("NumPadPeriod", "Num . (Kropka)"), ("NumPadEnter", "Num Enter")
     ],
-    "Multimedia i Audio": [
+    "🎵 Media (Multimedia i Dźwięk)": [
         ("VolumeUp", "🔊 Głośność + (Volume Up)"),
         ("VolumeDown", "🔉 Głośność - (Volume Down)"),
         ("VolumeMute", "🔇 Wycisz dźwięk (Mute)"),
@@ -340,18 +344,44 @@ TARGET_KEY_CATEGORIES = {
         ("MediaPrevious", "⏮️ Poprzedni utwór"),
         ("MediaStop", "⏹️ Zatrzymaj odtwarzanie"),
         ("OpenMediaPlayer", "🎵 Otwórz Odtwarzacz Muzyki"),
+        ("Eject", "⏏️ Wysuń nośnik (Eject)")
+    ],
+    "💡 Light / Backlight (Zarządzanie Podświetleniem)": [
+        ("0x09060002", "💡 Włącz / Wyłącz podświetlenie (Toggle)"),
+        ("0x09020001", "☀️ Zwiększ jasność podświetlenia (Jasność +)"),
+        ("0x09020002", "🌙 Zmniejsz jasność podświetlenia (Jasność -)"),
+        ("0x09030001", "⏩ Zwiększ szybkość animacji LED (Szybkość +)"),
+        ("0x09030002", "⏪ Zmniejsz szybkość animacji LED (Szybkość -)"),
+        ("0x09060001", "⏸️ Wstrzymaj / Wznów animację LED (Pauza)"),
+        ("0x09010010", "🌈 Przełącz następny profil / efekt oświetlenia"),
+        ("0x09010011", "✨ Przełącz tryb efektu podświetlenia")
+    ],
+    "🌐 System / Net (System i Internet)": [
         ("OpenCalculator", "🧮 Otwórz Kalkulator"),
         ("OpenMyComputer", "💻 Mój Komputer / Eksplorator"),
-        ("OpenEmail", "✉️ Program pocztowy (Email)")
-    ],
-    "Przeglądarka i Internet": [
-        ("BrowserHome", "🏠 Strona główna"),
+        ("OpenEmail", "✉️ Program pocztowy (Email)"),
+        ("BrowserHome", "🏠 Strona główna przeglądarki"),
         ("BrowserBack", "⬅️ Wstecz w przeglądarce"),
         ("BrowserForward", "➡️ Dalej w przeglądarce"),
         ("BrowserRefresh", "🔄 Odśwież stronę"),
-        ("BrowserStop", "🛑 Zatrzymaj ładowanie"),
         ("BrowserFavorites", "⭐ Ulubione / Zakładki"),
-        ("BrowserSearch", "🔍 Szukaj w internecie")
+        ("BrowserSearch", "🔍 Szukaj w internecie"),
+        ("Screenshot", "📸 Print Screen (Zrzut ekranu)"),
+        ("ScrollLock", "Scroll Lock"),
+        ("Pause", "Pause / Break"),
+        ("F13", "F13"), ("F14", "F14"), ("F15", "F15"), ("F16", "F16"),
+        ("F17", "F17"), ("F18", "F18"), ("F19", "F19"), ("F20", "F20"),
+        ("F21", "F21"), ("F22", "F22"), ("F23", "F23"), ("F24", "F24")
+    ],
+    "🖱️ Mouse (Sterowanie Myszą)": [
+        ("LeftClick", "🖱️ Lewy przycisk myszy (Left Click)"),
+        ("RightClick", "🖱️ Prawy przycisk myszy (Right Click)"),
+        ("MiddleClick", "🖱️ Środkowy przycisk myszy (Middle Click)"),
+        ("MouseBack", "◀️ Mysz Wstecz (Button 4)"),
+        ("MouseForward", "▶️ Mysz Dalej (Button 5)")
+    ],
+    "🚫 Disable (Wyłączenie klawisza)": [
+        ("0x02000000", "🚫 Wyłącz działanie klawisza (Brak akcji)")
     ]
 }
 

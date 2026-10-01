@@ -408,4 +408,37 @@ QFrame#oledScreenMockup {
     border-radius: 6px;
     padding: 4px 8px;
 }
+
+/* Sub-Tab Widget for Categories (Primary, Numpad, Media, Light, System, Mouse) */
+QTabWidget QTabWidget::pane {
+    border: 1px solid #292e42;
+    background-color: #141622;
+    border-radius: 8px;
+    top: -1px;
+}
+
+QTabWidget QTabBar::tab {
+    background-color: #181926;
+    color: #a9b1d6;
+    padding: 6px 12px;
+    margin-right: 3px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    font-size: 11px;
+    font-weight: bold;
+    border: 1px solid #292e42;
+    border-bottom: none;
+}
+
+QTabWidget QTabBar::tab:selected {
+    background-color: #3d59a1;
+    color: #ffffff;
+    border: 1px solid #7aa2f7;
+    border-bottom: none;
+}
+
+QTabWidget QTabBar::tab:hover:!selected {
+    background-color: #24283b;
+    color: #ffffff;
+}
 """

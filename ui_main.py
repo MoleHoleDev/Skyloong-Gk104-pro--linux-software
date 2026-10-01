@@ -21,6 +21,62 @@ from gk_backend import (
     get_system_battery_info
 )
 
+# Friendly short names for visual keyboard display and tooltips
+ACTION_SHORT_LABELS = {
+    # Light / Backlight
+    "0x09060002": "💡LED OnOff",
+    "0x09020001": "☀️Jas+",
+    "0x09020002": "🌙Jas-",
+    "0x09030001": "⏩Szyb+",
+    "0x09030002": "⏪Szyb-",
+    "0x09060001": "⏸️LED Pauza",
+    "0x09010010": "🌈LED Efekt",
+    "0x09010011": "✨LED Tryb",
+    "0x02000000": "🚫Wyłączony",
+    # Media
+    "VolumeUp": "🔊Vol+",
+    "VolumeDown": "🔉Vol-",
+    "VolumeMute": "🔇Mute",
+    "MediaPlayPause": "⏯️Play/Pause",
+    "MediaNext": "⏭️Next",
+    "MediaPrevious": "⏮️Prev",
+    "MediaStop": "⏹️Stop",
+    "OpenMediaPlayer": "🎵Player",
+    "Eject": "⏏️Eject",
+    # System / Net
+    "OpenCalculator": "🧮Kalk",
+    "OpenMyComputer": "💻Mój PC",
+    "OpenEmail": "✉️Email",
+    "BrowserHome": "🏠Home",
+    "BrowserBack": "⬅️Wstecz",
+    "BrowserForward": "➡️Dalej",
+    "BrowserRefresh": "🔄Odśw",
+    "BrowserFavorites": "⭐Ulub",
+    "BrowserSearch": "🔍Szukaj",
+    "Screenshot": "📸PrtSc",
+    # Mouse
+    "LeftClick": "🖱️L-Klik",
+    "RightClick": "🖱️P-Klik",
+    "MiddleClick": "🖱️Ś-Klik",
+    "MouseBack": "◀️M-Wstecz",
+    "MouseForward": "▶️M-Dalej"
+}
+
+
+def get_friendly_action_label(action: str) -> str:
+    """Return a descriptive, readable label for any key or special action code."""
+    if not action:
+        return "Domyślna funkcja"
+    if action.startswith("Macro(") and action.endswith(")"):
+        return f"⚡ Makro: {action[6:-1]}"
+    for cat_name, keys in TARGET_KEY_CATEGORIES.items():
+        for kid, klabel in keys:
+            if kid == action:
+                return f"{klabel} [{kid}]"
+    if action in ACTION_SHORT_LABELS:
+        return ACTION_SHORT_LABELS[action]
+    return action
+
 
 class KeyVisualButton(QPushButton):
     """Interactive visual representation of a keyboard key for RGB & Remap visualizers."""
@@ -79,9 +135,11 @@ class KeyVisualButton(QPushButton):
             lines.append(self.label_text)
 
         if self.remap_action:
-            short_act = self.remap_action
-            if len(short_act) > 7:
-                short_act = short_act[:6] + ".."
+            short_act = ACTION_SHORT_LABELS.get(self.remap_action, self.remap_action)
+            if short_act.startswith("Macro(") and short_act.endswith(")"):
+                short_act = "⚡" + short_act[6:-1]
+            if len(short_act) > 8:
+                short_act = short_act[:7] + ".."
             lines.append(short_act)
 
         self.setText("\n".join(lines))
@@ -107,7 +165,7 @@ class KeyVisualButton(QPushButton):
         if self.knob_id:
             tip += f"\n🎛️ Gniazdo modułowego pokrętła: {self.knob_name}\n(Kliknij, aby skonfigurować obrót ↻/↺ i wciśnięcie)"
         if self.remap_action:
-            tip += f"\nPrzypisana akcja: {self.remap_action}"
+            tip += f"\nPrzypisana akcja: {get_friendly_action_label(self.remap_action)}"
         self.setToolTip(tip)
 
         self.setStyleSheet(f"""
@@ -551,8 +609,13 @@ class MainWindow(QMainWindow):
     # TAB 1: RGB LIGHTING
     # =========================================================================
     def create_lighting_tab(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+
+        container = QWidget()
+        container.setMinimumSize(980, 750)
+        layout = QVBoxLayout(container)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
@@ -602,6 +665,7 @@ class MainWindow(QMainWindow):
 
         # Authentic GK104 Pro Chassis with Smart Screen Mockup & Sunken Switch Plate
         self.rgb_chassis = GK104ChassisWidget()
+        self.rgb_chassis.setMinimumSize(960, 260)
         self.rgb_grid_layout = self.rgb_chassis.plate_layout
 
         self.build_keyboard_grid(
@@ -620,6 +684,7 @@ class MainWindow(QMainWindow):
         # Left: Animated library
         left_card = QFrame()
         left_card.setObjectName("cardFrame")
+        left_card.setMinimumSize(420, 320)
         left_vbox = QVBoxLayout(left_card)
         left_vbox.setContentsMargins(8, 8, 8, 8)
 
@@ -640,6 +705,7 @@ class MainWindow(QMainWindow):
         left_vbox.addLayout(search_box)
 
         self.effects_list_widget = QListWidget()
+        self.effects_list_widget.setMinimumHeight(180)
         self.effects_list_widget.currentItemChanged.connect(self.on_effect_list_item_changed)
         self.effects_list_widget.itemDoubleClicked.connect(self.on_effect_double_clicked)
         left_vbox.addWidget(self.effects_list_widget)
@@ -654,6 +720,7 @@ class MainWindow(QMainWindow):
         # Right: Palette, Presets & Zones
         right_card = QFrame()
         right_card.setObjectName("cardFrame")
+        right_card.setMinimumSize(460, 320)
         right_vbox = QVBoxLayout(right_card)
         right_vbox.setContentsMargins(8, 8, 8, 8)
 
@@ -757,7 +824,8 @@ class MainWindow(QMainWindow):
         splitter.setSizes([450, 550])
         layout.addWidget(splitter)
 
-        return widget
+        scroll_area.setWidget(container)
+        return scroll_area
 
     # =========================================================================
     # TAB 2: KEY REMAPPING & ROTARY KNOBS
@@ -768,6 +836,7 @@ class MainWindow(QMainWindow):
         scroll_area.setFrameShape(QFrame.NoFrame)
 
         container = QWidget()
+        container.setMinimumSize(980, 880)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
@@ -819,6 +888,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(remap_header)
 
         self.remap_chassis = GK104ChassisWidget()
+        self.remap_chassis.setMinimumSize(960, 260)
         self.remap_grid_layout = self.remap_chassis.plate_layout
 
         self.build_keyboard_grid(
@@ -834,6 +904,7 @@ class MainWindow(QMainWindow):
         # Rotary Knobs Section (GK104 Pro Modular Knobs)
         knobs_card = QFrame()
         knobs_card.setObjectName("cardFrame")
+        knobs_card.setMinimumSize(960, 180)
         knobs_vbox = QVBoxLayout(knobs_card)
         knobs_vbox.setContentsMargins(10, 10, 10, 10)
         knobs_vbox.setSpacing(8)
@@ -856,6 +927,7 @@ class MainWindow(QMainWindow):
         for idx, knob_info in enumerate(KNOBS_METADATA):
             k_card = QFrame()
             k_card.setObjectName("knobCard")
+            k_card.setMinimumSize(290, 105)
             k_card_vbox = QVBoxLayout(k_card)
             k_card_vbox.setContentsMargins(8, 8, 8, 8)
             k_card_vbox.setSpacing(4)
@@ -900,32 +972,100 @@ class MainWindow(QMainWindow):
         # Action Assigner Frame
         assign_card = QFrame()
         assign_card.setObjectName("cardFrame")
+        assign_card.setMinimumSize(460, 340)
         assign_vbox = QVBoxLayout(assign_card)
         assign_vbox.setContentsMargins(10, 10, 10, 10)
-        assign_vbox.setSpacing(8)
+        assign_vbox.setSpacing(6)
 
+        # Header with selected element indicator & preview
+        top_assign_header = QHBoxLayout()
         self.lbl_selected_remap_key = QLabel("Edytowany element: [ Lewa Spacja ]")
-        self.lbl_selected_remap_key.setStyleSheet("font-size: 15px; font-weight: bold; color: #ff9eaf;")
-        assign_vbox.addWidget(self.lbl_selected_remap_key)
+        self.lbl_selected_remap_key.setStyleSheet("font-size: 14px; font-weight: bold; color: #ff9eaf;")
+        top_assign_header.addWidget(self.lbl_selected_remap_key)
+        top_assign_header.addStretch()
 
-        # Mode Selection
-        self.remap_mode_tabs = QTabWidget()
+        self.lbl_picked_action_info = QLabel("Wybrana funkcja: (Wybierz poniżej)")
+        self.lbl_picked_action_info.setStyleSheet("font-size: 11px; font-weight: bold; color: #7dcfff; background-color: #141724; padding: 3px 8px; border-radius: 4px; border: 1px solid #292d3e;")
+        top_assign_header.addWidget(self.lbl_picked_action_info)
+        assign_vbox.addLayout(top_assign_header)
 
-        # Mode A: Standard Key
-        tab_std = QWidget()
-        v_std = QVBoxLayout(tab_std)
-        v_std.addWidget(QLabel("Wybierz klawisz docelowy z listy:"))
-        self.std_key_combo = QComboBox()
-        for cat_name, keys in TARGET_KEY_CATEGORIES.items():
-            for kid, klabel in keys:
-                self.std_key_combo.addItem(f"[{cat_name}] {klabel}", kid)
-        v_std.addWidget(self.std_key_combo)
-        v_std.addStretch()
-        self.remap_mode_tabs.addTab(tab_std, "Pojedynczy klawisz")
+        # Search bar for instant filtering of all actions
+        search_row = QHBoxLayout()
+        self.remap_action_search = QLineEdit()
+        self.remap_action_search.setPlaceholderText("🔍 Szybkie szukanie funkcji (np. głośność, jasność, kalkulator, enter, A, F1)...")
+        self.remap_action_search.textChanged.connect(self.on_remap_search_changed)
+        search_row.addWidget(self.remap_action_search)
 
-        # Mode B: Modifier Combination (Shortcut)
+        btn_clear_search = QPushButton("✕")
+        btn_clear_search.setFixedWidth(28)
+        btn_clear_search.clicked.connect(lambda: self.remap_action_search.clear())
+        search_row.addWidget(btn_clear_search)
+        assign_vbox.addLayout(search_row)
+
+        # Tabbed categories matching official Skyloong software (Primary, Number Pad, Media, Light, System/Net, Mouse, etc.)
+        self.remap_category_tabs = QTabWidget()
+        self.category_action_buttons: Dict[str, List[QPushButton]] = {}
+        self.current_picked_action: Optional[str] = None
+
+        # Build category tabs
+        for cat_title, cat_items in TARGET_KEY_CATEGORIES.items():
+            tab_page = QWidget()
+            tab_layout = QVBoxLayout(tab_page)
+            tab_layout.setContentsMargins(4, 6, 4, 4)
+            tab_layout.setSpacing(4)
+
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setStyleSheet("background: transparent; border: none;")
+
+            grid_widget = QWidget()
+            grid_widget.setStyleSheet("background: transparent;")
+            grid_layout = QGridLayout(grid_widget)
+            grid_layout.setSpacing(4)
+            grid_layout.setContentsMargins(2, 2, 2, 2)
+
+            self.category_action_buttons[cat_title] = []
+
+            # Number of columns based on category
+            cols = 4 if "Primary" in cat_title else 3
+
+            for idx, (action_code, action_label) in enumerate(cat_items):
+                btn_act = QPushButton(action_label)
+                btn_act.setProperty("action_code", action_code)
+                btn_act.setProperty("action_label", action_label)
+                btn_act.setStyleSheet("""
+                    QPushButton {
+                        background-color: #24293e;
+                        border: 1px solid #3b4261;
+                        border-radius: 6px;
+                        padding: 6px 6px;
+                        font-size: 11px;
+                        font-weight: bold;
+                        text-align: left;
+                        color: #c0caf5;
+                    }
+                    QPushButton:hover {
+                        background-color: #2f3652;
+                        border: 1px solid #7aa2f7;
+                        color: #ffffff;
+                    }
+                """)
+                btn_act.setCursor(Qt.PointingHandCursor)
+                btn_act.clicked.connect(lambda _, code=action_code, lbl=action_label, b=btn_act: self.on_category_action_clicked(code, lbl, b))
+                btn_act.setToolTip(f"Kliknij, aby wybrać. Kod: {action_code}")
+                grid_layout.addWidget(btn_act, idx // cols, idx % cols)
+                self.category_action_buttons[cat_title].append(btn_act)
+
+            grid_layout.setRowStretch(grid_layout.rowCount(), 1)
+            scroll.setWidget(grid_widget)
+            tab_layout.addWidget(scroll)
+            self.remap_category_tabs.addTab(tab_page, cat_title)
+
+        # Tab: Modifiers Combination (Shortcuts)
         tab_combo = QWidget()
         v_combo = QVBoxLayout(tab_combo)
+        v_combo.setContentsMargins(6, 6, 6, 6)
+        v_combo.setSpacing(6)
         v_combo.addWidget(QLabel("Zaznacz modyfikatory i wybierz klawisz bazowy:"))
 
         mod_box = QHBoxLayout()
@@ -933,23 +1073,23 @@ class MainWindow(QMainWindow):
         self.chk_shift = QCheckBox("Shift")
         self.chk_alt = QCheckBox("Alt")
         self.chk_win = QCheckBox("Win")
-        mod_box.addWidget(self.chk_ctrl)
-        mod_box.addWidget(self.chk_shift)
-        mod_box.addWidget(self.chk_alt)
-        mod_box.addWidget(self.chk_win)
+        for chk in [self.chk_ctrl, self.chk_shift, self.chk_alt, self.chk_win]:
+            chk.toggled.connect(self.update_combination_preview)
+            mod_box.addWidget(chk)
         v_combo.addLayout(mod_box)
 
         combo_base_row = QHBoxLayout()
         combo_base_row.addWidget(QLabel("Klawisz bazowy:"))
         self.combo_base_key = QComboBox()
         for cat_name, keys in TARGET_KEY_CATEGORIES.items():
-            if "Podstawowe" in cat_name or "Funkcyjne" in cat_name or "Nawigacja" in cat_name or "Multimedia" in cat_name:
+            if "Primary" in cat_name or "Number Pad" in cat_name or "Media" in cat_name:
                 for kid, klabel in keys:
-                    self.combo_base_key.addItem(f"{kid} ({klabel})", kid)
+                    self.combo_base_key.addItem(f"{klabel} ({kid})", kid)
+        self.combo_base_key.currentIndexChanged.connect(self.update_combination_preview)
         combo_base_row.addWidget(self.combo_base_key)
         v_combo.addLayout(combo_base_row)
 
-        v_combo.addWidget(QLabel("Lub wybierz popularny skrót:"))
+        v_combo.addWidget(QLabel("Lub wybierz gotowy popularny skrót:"))
         self.popular_shortcuts_combo = QComboBox()
         self.popular_shortcuts_combo.addItem("-- Wybierz gotowy skrót --", "")
         for s_code, s_desc in POPULAR_SHORTCUTS:
@@ -957,27 +1097,36 @@ class MainWindow(QMainWindow):
         self.popular_shortcuts_combo.currentIndexChanged.connect(self.on_popular_shortcut_selected)
         v_combo.addWidget(self.popular_shortcuts_combo)
         v_combo.addStretch()
-        self.remap_mode_tabs.addTab(tab_combo, "Kombinacja (Skrót)")
+        self.remap_category_tabs.addTab(tab_combo, "⚡ Kombinacja (Skrót)")
 
-        # Mode C: Macro Assignment
+        # Tab: Macro
         tab_macro = QWidget()
         v_macro = QVBoxLayout(tab_macro)
-        v_macro.addWidget(QLabel("Przypisz zdefiniowane makro:"))
+        v_macro.setContentsMargins(6, 6, 6, 6)
+        v_macro.setSpacing(6)
+        v_macro.addWidget(QLabel("Wybierz zdefiniowane makro z listy:"))
         self.remap_macro_combo = QComboBox()
+        self.remap_macro_combo.currentIndexChanged.connect(self.on_macro_combo_changed)
         v_macro.addWidget(self.remap_macro_combo)
+
+        self.lbl_macro_details = QLabel("")
+        self.lbl_macro_details.setStyleSheet("color: #7dcfff; font-size: 11px;")
+        v_macro.addWidget(self.lbl_macro_details)
         v_macro.addStretch()
-        self.remap_mode_tabs.addTab(tab_macro, "Makro")
+        self.remap_category_tabs.addTab(tab_macro, "📜 Makro")
 
-        assign_vbox.addWidget(self.remap_mode_tabs)
+        assign_vbox.addWidget(self.remap_category_tabs)
 
-        # Action buttons
+        # Action confirmation buttons
         btn_box = QHBoxLayout()
-        btn_assign = QPushButton("✅ Przypisz do wybranego elementu")
-        btn_assign.setObjectName("primaryBtn")
-        btn_assign.clicked.connect(self.assign_selected_remap_action)
-        btn_box.addWidget(btn_assign)
+        self.btn_assign_action = QPushButton("✅ Przypisz wybraną funkcję do elementu")
+        self.btn_assign_action.setObjectName("primaryBtn")
+        self.btn_assign_action.setFixedHeight(36)
+        self.btn_assign_action.clicked.connect(self.assign_selected_remap_action)
+        btn_box.addWidget(self.btn_assign_action)
 
         btn_reset_key = QPushButton("🗑️ Przywróć domyślny")
+        btn_reset_key.setFixedHeight(36)
         btn_reset_key.clicked.connect(self.reset_selected_key_remap)
         btn_box.addWidget(btn_reset_key)
         assign_vbox.addLayout(btn_box)
@@ -987,11 +1136,13 @@ class MainWindow(QMainWindow):
         # Right: Remap Table
         table_card = QFrame()
         table_card.setObjectName("cardFrame")
+        table_card.setMinimumSize(460, 340)
         table_vbox = QVBoxLayout(table_card)
         table_vbox.setContentsMargins(8, 8, 8, 8)
 
         table_vbox.addWidget(QLabel("Zmodyfikowane klawisze i pokrętła na aktywnej warstwie:"))
         self.remap_table = QTableWidget()
+        self.remap_table.setMinimumHeight(200)
         self.remap_table.setColumnCount(3)
         self.remap_table.setHorizontalHeaderLabels(["Źródło / Klawisz / Knob", "Przypisana Akcja / Makro", "Akcja"])
         self.remap_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -1010,8 +1161,13 @@ class MainWindow(QMainWindow):
     # TAB 3: MACRO STUDIO
     # =========================================================================
     def create_macro_tab(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+
+        container = QWidget()
+        container.setMinimumSize(960, 640)
+        layout = QVBoxLayout(container)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
@@ -1020,6 +1176,7 @@ class MainWindow(QMainWindow):
         # Left: Macro List
         left_card = QFrame()
         left_card.setObjectName("cardFrame")
+        left_card.setMinimumSize(280, 480)
         left_vbox = QVBoxLayout(left_card)
         left_vbox.setContentsMargins(8, 8, 8, 8)
 
@@ -1048,6 +1205,7 @@ class MainWindow(QMainWindow):
         # Right: Macro Editor
         right_card = QFrame()
         right_card.setObjectName("cardFrame")
+        right_card.setMinimumSize(620, 480)
         right_vbox = QVBoxLayout(right_card)
         right_vbox.setContentsMargins(10, 10, 10, 10)
         right_vbox.setSpacing(8)
@@ -1089,6 +1247,7 @@ class MainWindow(QMainWindow):
         # Macro Actions Table
         right_vbox.addWidget(QLabel("Sekwencja akcji makra (Kroki):"))
         self.macro_actions_table = QTableWidget()
+        self.macro_actions_table.setMinimumHeight(240)
         self.macro_actions_table.setColumnCount(4)
         self.macro_actions_table.setHorizontalHeaderLabels(["Typ Akcji", "Klawisz / Znak", "Opóźnienie (ms)", "Opcje"])
         self.macro_actions_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -1138,14 +1297,20 @@ class MainWindow(QMainWindow):
         splitter.setSizes([350, 650])
         layout.addWidget(splitter)
 
-        return widget
+        scroll_area.setWidget(container)
+        return scroll_area
 
     # =========================================================================
     # TAB 4: DEBUG & DIAGNOSTICS
     # =========================================================================
     def create_debug_tab(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+
+        container = QWidget()
+        container.setMinimumSize(960, 580)
+        layout = QVBoxLayout(container)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
@@ -1159,6 +1324,7 @@ class MainWindow(QMainWindow):
 
         self.debug_code_text = QPlainTextEdit()
         self.debug_code_text.setReadOnly(True)
+        self.debug_code_text.setMinimumHeight(380)
         self.debug_code_text.setStyleSheet("font-family: monospace; font-size: 11px; background-color: #13141c; color: #a9b1d6;")
         card_vbox.addWidget(self.debug_code_text)
 
@@ -1178,7 +1344,8 @@ class MainWindow(QMainWindow):
         card_vbox.addLayout(btn_row)
 
         layout.addWidget(card)
-        return widget
+        scroll_area.setWidget(container)
+        return scroll_area
 
     # =========================================================================
     # SIGNALS & CONNECTORS
@@ -1449,9 +1616,20 @@ class MainWindow(QMainWindow):
 
     def refresh_remap_ui(self):
         # Update macro dropdown in remap inspector
+        self.remap_macro_combo.blockSignals(True)
         self.remap_macro_combo.clear()
         for m_name in self.backend.macros.keys():
-            self.remap_macro_combo.addItem(f"Makro: {m_name}", f"Macro({m_name})")
+            self.remap_macro_combo.addItem(f"⚡ Makro: {m_name}", f"Macro({m_name})")
+        self.remap_macro_combo.blockSignals(False)
+
+        if self.backend.macros:
+            curr_macro_val = self.remap_macro_combo.currentData()
+            if curr_macro_val:
+                m_obj = self.backend.macros.get(curr_macro_val[6:-1])
+                if m_obj:
+                    self.lbl_macro_details.setText(f"Długość: {len(m_obj.actions)} kroków • Tryb: {m_obj.repeat_type}")
+        else:
+            self.lbl_macro_details.setText("Brak makr. Utwórz je w zakładce 'Menedżer Makr'.")
 
         # Update visual keyboard buttons on current layer
         layer_remaps = self.backend.get_remaps_for_layer(self.current_remap_layer)
@@ -1469,7 +1647,8 @@ class MainWindow(QMainWindow):
                     assigned = layer_remaps.get(aid)
                     is_sel = (aid == self.selected_remap_key)
                     if assigned:
-                        btn.setText(f"{act['label']}: {assigned} ⚡")
+                        friendly_act = get_friendly_action_label(assigned)
+                        btn.setText(f"{act['label']}: {friendly_act}")
                         btn.setStyleSheet("""
                             background-color: #1f3554;
                             border: 2px solid #7aa2f7;
@@ -1501,8 +1680,9 @@ class MainWindow(QMainWindow):
 
             # Friendly readable source name
             src_desc = self._get_friendly_key_name(src)
+            dst_desc = get_friendly_action_label(dst)
             self.remap_table.setItem(row_idx, 0, QTableWidgetItem(src_desc))
-            self.remap_table.setItem(row_idx, 1, QTableWidgetItem(dst))
+            self.remap_table.setItem(row_idx, 1, QTableWidgetItem(dst_desc))
 
             btn_del = QPushButton("Usuń")
             btn_del.clicked.connect(lambda _, k=src: self.delete_remap_from_table(k))
@@ -1558,42 +1738,85 @@ class MainWindow(QMainWindow):
 
         self.remap_chassis.update_screen_info("1.04″ SMART SCREEN", f"REMAP: {key_id[:12].upper()}")
 
-    def on_knob_preset_applied(self, knob_id: str, combo: QComboBox):
-        preset_name = combo.currentData()
-        if not preset_name:
-            return
+    def on_category_action_clicked(self, action_code: str, action_label: str, button: QPushButton):
+        self.current_picked_action = action_code
+        self.lbl_picked_action_info.setText(f"Wybrana funkcja: {action_label}")
 
-        scheme = KNOB_PRESETS.get(preset_name)
-        if not scheme:
-            return
+        # Update styling of category buttons
+        for btn_list in self.category_action_buttons.values():
+            for b in btn_list:
+                if b == button:
+                    b.setStyleSheet("""
+                        QPushButton {
+                            background-color: #3d59a1;
+                            border: 2px solid #ff9eaf;
+                            border-radius: 6px;
+                            padding: 6px 6px;
+                            font-size: 11px;
+                            font-weight: bold;
+                            text-align: left;
+                            color: #ffffff;
+                        }
+                    """)
+                else:
+                    b.setStyleSheet("""
+                        QPushButton {
+                            background-color: #24293e;
+                            border: 1px solid #3b4261;
+                            border-radius: 6px;
+                            padding: 6px 6px;
+                            font-size: 11px;
+                            font-weight: bold;
+                            text-align: left;
+                            color: #c0caf5;
+                        }
+                        QPushButton:hover {
+                            background-color: #2f3652;
+                            border: 1px solid #7aa2f7;
+                            color: #ffffff;
+                        }
+                    """)
 
-        # Map the 3 actions for this knob on the current layer
-        if knob_id == "Knob1":
-            self.backend.set_key_remap(self.current_remap_layer, "Knob1_CW", scheme["CW"])
-            self.backend.set_key_remap(self.current_remap_layer, "Knob1_CCW", scheme["CCW"])
-            self.backend.set_key_remap(self.current_remap_layer, "Knob1_Click", scheme["Click"])
-        elif knob_id == "Knob2":
-            self.backend.set_key_remap(self.current_remap_layer, "Knob2_CW", scheme["CW"])
-            self.backend.set_key_remap(self.current_remap_layer, "Knob2_CCW", scheme["CCW"])
-            self.backend.set_key_remap(self.current_remap_layer, "Knob2_Click", scheme["Click"])
-        elif knob_id == "Knob3":
-            self.backend.set_key_remap(self.current_remap_layer, "Knob3_CW", scheme["CW"])
-            self.backend.set_key_remap(self.current_remap_layer, "Knob3_CCW", scheme["CCW"])
-            self.backend.set_key_remap(self.current_remap_layer, "Knob3_Click", scheme["Click"])
-        elif knob_id == "Knob4":
-            self.backend.set_key_remap(self.current_remap_layer, "Knob4_CW", scheme["CW"])
-            self.backend.set_key_remap(self.current_remap_layer, "Knob4_CCW", scheme["CCW"])
-            self.backend.set_key_remap(self.current_remap_layer, "Knob4_Click", scheme["Click"])
-        elif knob_id == "Knob5":
-            self.backend.set_key_remap(self.current_remap_layer, "Knob5_CW", scheme["CW"])
-            self.backend.set_key_remap(self.current_remap_layer, "Knob5_CCW", scheme["CCW"])
-            self.backend.set_key_remap(self.current_remap_layer, "Knob5_Click", scheme["Click"])
-        elif knob_id == "Knob6":
-            self.backend.set_key_remap(self.current_remap_layer, "Knob6_Click", scheme["Click"])
+    def on_remap_search_changed(self, text: str):
+        query = text.strip().lower()
+        for cat_title, btn_list in self.category_action_buttons.items():
+            for b in btn_list:
+                code = b.property("action_code") or ""
+                lbl = b.property("action_label") or ""
+                if not query or query in code.lower() or query in lbl.lower():
+                    b.show()
+                else:
+                    b.hide()
 
-        combo.setCurrentIndex(0)
-        self.refresh_remap_ui()
-        self.lbl_bottom_info.setText(f"Zastosowano schemat '{preset_name}' dla {knob_id} na warstwie {self.current_remap_layer}.")
+    def update_combination_preview(self):
+        mods = []
+        if self.chk_ctrl.isChecked():
+            mods.append("LCtrl")
+        if self.chk_shift.isChecked():
+            mods.append("LShift")
+        if self.chk_alt.isChecked():
+            mods.append("LAlt")
+        if self.chk_win.isChecked():
+            mods.append("LWin")
+
+        base_k = self.combo_base_key.currentData() or "A"
+        if mods:
+            combo_str = "+".join(mods) + "+" + base_k
+        else:
+            combo_str = base_k
+
+        self.current_picked_action = combo_str
+        self.lbl_picked_action_info.setText(f"Wybrana funkcja: ⚡ Skrót: {combo_str}")
+
+    def on_macro_combo_changed(self):
+        macro_act = self.remap_macro_combo.currentData()
+        if macro_act:
+            self.current_picked_action = macro_act
+            self.lbl_picked_action_info.setText(f"Wybrana funkcja: {macro_act}")
+            m_name = macro_act[6:-1]
+            m_obj = self.backend.macros.get(m_name)
+            if m_obj:
+                self.lbl_macro_details.setText(f"Długość: {len(m_obj.actions)} kroków • Tryb: {m_obj.repeat_type}")
 
     def on_popular_shortcut_selected(self):
         code = self.popular_shortcuts_combo.currentData()
@@ -1609,20 +1832,17 @@ class MainWindow(QMainWindow):
         idx = self.combo_base_key.findData(base_key)
         if idx >= 0:
             self.combo_base_key.setCurrentIndex(idx)
+        self.update_combination_preview()
 
     def assign_selected_remap_action(self):
         if not self.selected_remap_key:
-            QMessageBox.warning(self, "Brak elementu", "Kliknij najpierw klawisz lub akcję pokrętła!")
+            QMessageBox.warning(self, "Brak elementu", "Kliknij najpierw klawisz na klawiaturze lub akcję pokrętła!")
             return
 
-        mode_idx = self.remap_mode_tabs.currentIndex()
-        target_action = ""
+        current_tab_text = self.remap_category_tabs.tabText(self.remap_category_tabs.currentIndex())
+        target_action = self.current_picked_action
 
-        if mode_idx == 0:
-            # Single key
-            target_action = self.std_key_combo.currentData()
-        elif mode_idx == 1:
-            # Combination
+        if "Kombinacja" in current_tab_text:
             mods = []
             if self.chk_ctrl.isChecked():
                 mods.append("LCtrl")
@@ -1633,20 +1853,23 @@ class MainWindow(QMainWindow):
             if self.chk_win.isChecked():
                 mods.append("LWin")
 
-            base_k = self.combo_base_key.currentData()
+            base_k = self.combo_base_key.currentData() or "A"
             if mods:
                 target_action = "+".join(mods) + "+" + base_k
             else:
                 target_action = base_k
-        elif mode_idx == 2:
-            # Macro
+        elif "Makro" in current_tab_text:
             target_action = self.remap_macro_combo.currentData()
 
-        if target_action:
-            self.backend.set_key_remap(self.current_remap_layer, self.selected_remap_key, target_action)
-            self.refresh_remap_ui()
-            friendly_src = self._get_friendly_key_name(self.selected_remap_key)
-            self.lbl_bottom_info.setText(f"Przypisano {target_action} do {friendly_src} na {self.current_remap_layer}.")
+        if not target_action:
+            QMessageBox.warning(self, "Brak wybranej funkcji", "Kliknij jedną z funkcji w zakładkach powyżej przed przypisaniem!")
+            return
+
+        self.backend.set_key_remap(self.current_remap_layer, self.selected_remap_key, target_action)
+        self.refresh_remap_ui()
+        friendly_src = self._get_friendly_key_name(self.selected_remap_key)
+        friendly_dst = get_friendly_action_label(target_action)
+        self.lbl_bottom_info.setText(f"Przypisano '{friendly_dst}' do '{friendly_src}' na warstwie {self.current_remap_layer}.")
 
     def reset_selected_key_remap(self):
         if not self.selected_remap_key:
@@ -1958,6 +2181,28 @@ class MainWindow(QMainWindow):
         val = self.brightness_slider.value()
         self.backend.set_brightness(val, auto_apply=True)
         self.lbl_bottom_info.setText(f"Wgrywanie jasności {val}% do klawiatury...")
+
+    def on_knob_preset_applied(self, knob_id: str, combo_box: QComboBox):
+        """Apply selected quick action scheme (CW, CCW, Click) to the specified rotary knob."""
+        preset_name = combo_box.currentData()
+        if not preset_name or preset_name not in KNOB_PRESETS:
+            return
+
+        preset = KNOB_PRESETS[preset_name]
+        for act_suffix, target_code in preset.items():
+            aid = f"{knob_id}_{act_suffix}"
+            self.backend.set_key_remap(self.current_remap_layer, aid, target_code)
+
+        self.refresh_remap_ui()
+
+        # Reset combo selector without triggering recursion
+        combo_box.blockSignals(True)
+        combo_box.setCurrentIndex(0)
+        combo_box.blockSignals(False)
+
+        self.lbl_bottom_info.setText(
+            f"✅ Zastosowano schemat '{preset_name}' dla {knob_id} na warstwie {self.current_remap_layer}."
+        )
 
     def copy_knobs_to_all_layers(self):
         """Copy rotary knob configurations from active layer to all standard layers."""

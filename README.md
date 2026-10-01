@@ -6,21 +6,27 @@ Zaawansowana, natywna aplikacja graficzna w **Pythonie (PySide6)** stworzona dla
 
 ## Główne Funkcje Aplikacji
 
-### 1. ⌨️ Zaawansowane Remapowanie Klawiszy (Key Remapping)
+### 1. ⌨️ Zaawansowane Remapowanie Klawiszy (Kategorie zgodne z oficjalnym sterownikiem)
 - **Pełna obsługa warstw sprzętowych:**
   - `Base` (Warstwa podstawowa)
   - `Layer 1`, `Layer 2`, `Layer 3` (Warstwy pokładowe Onboard)
   - `FnLayer 1`, `FnLayer 2`, `FnLayer 3` (Kombinacje klawisza `Fn + Klawisz`)
-- **Interaktywna Wirtualna Klawiatura 104:**
-  - Wizualne oznaczenia zmodyfikowanych klawiszy i przypisanych akcji.
-  - Wybór dowolnego klawisza jednym kliknięciem myszy.
-- **Kategorie przypisań:**
-  - **Pojedyncze klawisze:** Alfanumeryczne, F1–F24, Nawigacja (Arrows, Home, End, Del, PgUp/Dn), NumPad, Modyfikatory.
-  - **Kombinacje skrótów:** Dowolne modyfikatory (`Ctrl`, `Shift`, `Alt`, `Win`) + klawisz bazowy (np. `Ctrl+C`, `Ctrl+V`, `Alt+Tab`, `Ctrl+Shift+Esc`, `Win+D`, `Alt+F4`).
-  - **Multimedia & System:** Regulacja głośności, Wyciszanie, Play/Pause, Następny/Poprzedni utwór, Odtwarzacz muzyki, Kalkulator, Mój Komputer, Funkcje przeglądarki.
-  - **Mysz:** Lewy klik, Prawy klik, Środkowy klik, Wstecz, Dalej.
-  - **Przypisanie Makra:** Błyskawiczne powiązanie dowolnego stworzonego makra z wybranym klawiszem.
-  - **Reset / Unmap:** Przywracanie domyślnego działania lub wyłączanie klawisza.
+- **Kategorie przypisań (zgodne z oficjalnym Skyloong Driver / Web Driver):**
+  - **⌨️ Primary (Klawisze Główne):** Alfanumeryczne (A-Z, 1-0, znaki specjalne), F1–F12, Nawigacja (Arrows, Home, End, Del, PgUp/Dn), Modyfikatory (Ctrl, Shift, Alt, Win).
+  - **🔢 Number Pad (Klawiatura Numeryczna):** NumLock, Num 0-9, Num +, -, *, /, Enter, Kropka.
+  - **🎵 Media (Multimedia i Dźwięk):** Głośność +, Głośność -, Wyciszenie, Play/Pause, Następny utwór, Poprzedni utwór, Stop, Odtwarzacz muzyki, Eject.
+  - **💡 Light / Backlight (Zarządzanie Podświetleniem):**
+    - Włącz / Wyłącz podświetlenie (Toggle)
+    - Zwiększ / Zmniejsz jasność podświetlenia (Jasność +/-)
+    - Zwiększ / Zmniejsz szybkość animacji LED (Szybkość +/-)
+    - Wstrzymaj / Wznów animację LED (Pauza)
+    - Przełącz następny profil oświetlenia / Przełącz tryb efektu
+  - **🌐 System / Net (System i Internet):** Kalkulator, Mój Komputer, Email, Przeglądarka (Home, Wstecz, Dalej, Odśwież, Ulubione, Szukaj), Zrzut ekranu (PrtSc), F13–F24.
+  - **🖱️ Mouse (Sterowanie Myszą):** Lewy klik, Prawy klik, Środkowy klik (Scroll), Mysz Wstecz, Mysz Dalej.
+  - **⚡ Kombinacje / Skróty:** Dowolne modyfikatory (`Ctrl`, `Shift`, `Alt`, `Win`) + klawisz bazowy oraz popularne skróty.
+  - **📜 Przypisanie Makr:** Błyskawiczne powiązanie dowolnego stworzonego makra z wybranym klawiszem lub pokrętłem.
+  - **🚫 Wyłącz (Disable):** Całkowite wyłączenie działania klawisza (brak akcji).
+- **Wyszukiwarka funkcji na żywo:** Szybkie filtrowanie wszystkich funkcji i skrótów w czasie rzeczywistym.
 - **Tabela przypisań aktywnej warstwy** z możliwością usuwania pojedynczych wpisów lub czyszczenia całej warstwy.
 
 ---
