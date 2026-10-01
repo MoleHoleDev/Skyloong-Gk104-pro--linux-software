@@ -1,4 +1,6 @@
+import math
 import os
+import time
 from typing import Dict, List, Optional
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -9,8 +11,8 @@ from PySide6.QtWidgets import (
     QGroupBox, QSplitter, QTextEdit, QPlainTextEdit, QFileDialog,
     QRadioButton, QSlider, QMenu, QSystemTrayIcon
 )
-from PySide6.QtCore import Qt, QSize, Signal, QTimer
-from PySide6.QtGui import QColor, QFont, QIcon, QPixmap, QAction
+from PySide6.QtCore import Qt, QSize, Signal, QTimer, QObject
+from PySide6.QtGui import QColor, QFont, QIcon, QPixmap, QAction, QPainter, QLinearGradient, QBrush, QPen
 
 from gk_backend import (
     GKBackend, KEY_DEFINITIONS, COLOR_PRESETS, AVAILABLE_LAYERS,
@@ -24,68 +26,316 @@ class KeyVisualButton(QPushButton):
     """Interactive visual representation of a keyboard key for RGB & Remap visualizers."""
     key_clicked = Signal(str)
 
-    def __init__(self, key_id: str, label: str, group: str):
-        super().__init__(label)
+    def __init__(self, key_id: str, label: str, group: str, width_u: float = 1.0, height_u: float = 1.0,
+                 knob_id: Optional[str] = None, knob_name: Optional[str] = None, mode: str = "rgb"):
+        super().__init__()
         self.key_id = key_id
         self.label_text = label
         self.group = group
+        self.width_u = width_u
+        self.height_u = height_u
+        self.knob_id = knob_id
+        self.knob_name = knob_name
+        self.mode = mode  # "rgb" or "remap"
         self.current_color = "#24283b"
         self.remap_action: Optional[str] = None
         self.is_selected = False
+        self.row = 0
+        self.col = 0.0
 
-        self.setProperty("class", "keyboardKey")
+        # Square keycap proportions: 1u is ~38x38 px
+        base_w = int(38 * width_u)
+        base_h = int(38 * height_u)
+        self.setMinimumSize(base_w, base_h)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
         self.setCursor(Qt.PointingHandCursor)
         self.clicked.connect(lambda: self.key_clicked.emit(self.key_id))
-        self.update_style()
+        self.update_content_and_style()
 
     def set_color(self, hex_color: str):
         self.current_color = hex_color
-        self.update_style()
+        self.update_content_and_style()
 
     def set_remap(self, action: Optional[str]):
         self.remap_action = action
-        if action:
-            short_act = action
-            if len(short_act) > 7:
-                short_act = short_act[:6] + ".."
-            self.setText(f"{self.label_text}\n{short_act}")
-        else:
-            self.setText(self.label_text)
-        self.update_style()
+        self.update_content_and_style()
 
     def set_selected(self, selected: bool):
         self.is_selected = selected
-        self.update_style()
+        self.update_content_and_style()
 
-    def update_style(self):
+    def update_content_and_style(self):
         c = QColor(self.current_color)
         luminance = (0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()) / 255
-        text_color = "#15161e" if luminance > 0.5 else "#ffffff"
+        text_color = "#15161e" if luminance > 0.55 else "#ffffff"
 
+        # Content text
+        lines = []
+        if self.mode == "remap" and self.knob_id:
+            knob_short = self.knob_id.replace("Knob", "K")
+            lines.append(f"🎛️{knob_short} {self.label_text}")
+        else:
+            lines.append(self.label_text)
+
+        if self.remap_action:
+            short_act = self.remap_action
+            if len(short_act) > 7:
+                short_act = short_act[:6] + ".."
+            lines.append(short_act)
+
+        self.setText("\n".join(lines))
+
+        # Borders & Background
         border = "1px solid #3b4261"
         if self.is_selected:
             border = "2px solid #ff9eaf"
+        elif self.mode == "remap" and self.knob_id:
+            border = "2px solid #ff9e3b"  # Amber highlight for modular knob sockets
         elif self.remap_action:
             border = "2px solid #7aa2f7"
 
         bg = self.current_color
-        if self.remap_action and self.current_color == "#24283b":
-            bg = "#1f3554"
+        if self.mode == "remap":
+            if self.knob_id and self.current_color in ["#24283b", "#000000"]:
+                bg = "#2b2216"  # Warm dark amber glow for knob sockets
+            elif self.remap_action and self.current_color in ["#24283b", "#000000"]:
+                bg = "#1f3554"
+
+        # Tooltip
+        tip = f"Klawisz: {self.label_text} ({self.key_id})"
+        if self.knob_id:
+            tip += f"\n🎛️ Gniazdo modułowego pokrętła: {self.knob_name}\n(Kliknij, aby skonfigurować obrót ↻/↺ i wciśnięcie)"
+        if self.remap_action:
+            tip += f"\nPrzypisana akcja: {self.remap_action}"
+        self.setToolTip(tip)
 
         self.setStyleSheet(f"""
             QPushButton {{
                 background-color: {bg};
                 color: {text_color};
                 border: {border};
-                border-radius: 4px;
+                border-radius: 5px;
                 font-size: 9px;
                 font-weight: bold;
                 padding: 1px;
             }}
             QPushButton:hover {{
-                border: 2px solid #7aa2f7;
+                border: 2px solid #7dcfff;
             }}
         """)
+
+
+class GK104ChassisWidget(QFrame):
+    """Authentic chassis frame for GK104 Pro with screen mockup, status LEDs, and brushed casing."""
+    def __init__(self, title_text: str = "Wizualna Klawiatura 104", parent=None):
+        super().__init__(parent)
+        self.setObjectName("gk104Chassis")
+        self.setFrameShape(QFrame.StyledPanel)
+        self.layout_inner = QVBoxLayout(self)
+        self.layout_inner.setContentsMargins(14, 10, 14, 12)
+        self.layout_inner.setSpacing(6)
+
+        # Top chassis bar: Logo, Smart Screen, Indicators
+        top_bar = QHBoxLayout()
+        top_bar.setContentsMargins(4, 2, 4, 4)
+
+        # Left / Logo
+        logo_box = QVBoxLayout()
+        logo_box.setSpacing(1)
+        lbl_brand = QLabel("⌨️ SKYLOONG")
+        lbl_brand.setStyleSheet("font-size: 13px; font-weight: 900; color: #c0caf5; letter-spacing: 2px;")
+        lbl_model = QLabel("GK104 PRO 8K • DUAL SMART SCREEN & 6-KNOB")
+        lbl_model.setStyleSheet("font-size: 9px; font-weight: bold; color: #7aa2f7; letter-spacing: 1px;")
+        logo_box.addWidget(lbl_brand)
+        logo_box.addWidget(lbl_model)
+        top_bar.addLayout(logo_box)
+
+        top_bar.addStretch()
+
+        # Status LEDs
+        leds_box = QHBoxLayout()
+        leds_box.setSpacing(6)
+        for led_tag, led_color in [
+            ("CAPS", "#9ece6a"), ("NUM", "#9ece6a"), ("WIN", "#7aa2f7"),
+            ("MAC", "#bb9af7"), ("2.4G", "#7dcfff"), ("BT", "#2ac3de"), ("USB", "#e0af68")
+        ]:
+            lbl_led = QLabel(f"● {led_tag}")
+            lbl_led.setStyleSheet(f"font-size: 9px; font-weight: bold; color: {led_color}; background-color: #161622; padding: 2px 6px; border-radius: 4px; border: 1px solid #24283b;")
+            leds_box.addWidget(lbl_led)
+        top_bar.addLayout(leds_box)
+
+        top_bar.addSpacing(14)
+
+        # Smart OLED Screen simulation mockup
+        self.screen_frame = QFrame()
+        self.screen_frame.setObjectName("oledScreenMockup")
+        self.screen_frame.setFixedSize(180, 38)
+        screen_layout = QVBoxLayout(self.screen_frame)
+        screen_layout.setContentsMargins(4, 2, 4, 2)
+        screen_layout.setSpacing(0)
+
+        self.lbl_screen_line1 = QLabel("1.04″ SMART SCREEN")
+        self.lbl_screen_line1.setStyleSheet("font-size: 8px; font-weight: bold; color: #7dcfff; font-family: monospace;")
+        self.lbl_screen_line2 = QLabel("PROFILE: LAYER 1 • ⚡ 100%")
+        self.lbl_screen_line2.setStyleSheet("font-size: 9px; font-weight: 900; color: #00f0ff; font-family: monospace;")
+
+        screen_layout.addWidget(self.lbl_screen_line1, alignment=Qt.AlignCenter)
+        screen_layout.addWidget(self.lbl_screen_line2, alignment=Qt.AlignCenter)
+        top_bar.addWidget(self.screen_frame)
+
+        self.layout_inner.addLayout(top_bar)
+
+        # Switch Plate Container (sunken dark grid container for keys)
+        self.plate_frame = QFrame()
+        self.plate_frame.setStyleSheet("""
+            QFrame {
+                background-color: #0b0c12;
+                border: 2px solid #1c1d2b;
+                border-radius: 8px;
+                padding: 4px;
+            }
+        """)
+        self.plate_layout = QGridLayout(self.plate_frame)
+        self.plate_layout.setSpacing(3)
+        self.plate_layout.setContentsMargins(3, 3, 3, 3)
+        self.layout_inner.addWidget(self.plate_frame)
+
+    def update_screen_info(self, line1: str, line2: str):
+        self.lbl_screen_line1.setText(line1)
+        self.lbl_screen_line2.setText(line2)
+
+
+class LiveRGBAnimationController(QObject):
+    """Engine for smooth real-time on-screen preview of animated RGB effects."""
+    def __init__(self, buttons_dict: Dict[str, KeyVisualButton], parent=None):
+        super().__init__(parent)
+        self.buttons = buttons_dict
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._on_tick)
+        self.speed = 1.0
+        self.tick = 0.0
+        self.current_mode = "preset"  # "preset", "static", "off"
+        self.preset_name = "Spectral Cycle"
+        self.static_colors: Dict[str, str] = {}
+        self.brightness = 100
+        self.is_running = True
+
+    def start(self):
+        self.is_running = True
+        if not self.timer.isActive():
+            self.timer.start(33)  # ~30 FPS
+
+    def stop(self):
+        self.is_running = False
+        self.timer.stop()
+
+    def set_speed(self, speed: float):
+        self.speed = max(0.1, min(5.0, speed))
+
+    def set_brightness(self, brightness: int):
+        self.brightness = max(0, min(100, brightness))
+
+    def set_preset(self, preset_name: str):
+        self.current_mode = "preset"
+        self.preset_name = preset_name
+
+    def set_static(self, colors: Dict[str, str]):
+        self.current_mode = "static"
+        self.static_colors = colors.copy()
+
+    def set_off(self):
+        self.current_mode = "off"
+
+    def _on_tick(self):
+        if not self.is_running or not self.buttons:
+            return
+
+        self.tick += 0.033 * self.speed
+        t = self.tick
+        factor = self.brightness / 100.0
+
+        if self.current_mode == "off" or self.brightness <= 0:
+            for btn in self.buttons.values():
+                btn.set_color("#181924")
+            return
+
+        if self.current_mode == "static":
+            for kid, btn in self.buttons.items():
+                hex_c = self.static_colors.get(kid, "#000000")
+                if hex_c in ["#000000", "0x000000"]:
+                    btn.set_color("#181924")
+                else:
+                    c = QColor(hex_c)
+                    r = int(c.red() * factor)
+                    g = int(c.green() * factor)
+                    b = int(c.blue() * factor)
+                    btn.set_color(f"#{r:02x}{g:02x}{b:02x}")
+            return
+
+        # Preset animations
+        p_lower = self.preset_name.lower()
+
+        for kid, btn in self.buttons.items():
+            row = getattr(btn, "row", 2)
+            col = getattr(btn, "col", 10.0)
+
+            if "streamer" in p_lower or "wave" in p_lower:
+                hue = int((t * 120 + col * 14 - row * 18) % 360)
+                sat = 240
+                val = int(255 * factor)
+            elif "breath" in p_lower or "respiration" in p_lower:
+                pulse = (math.sin(t * 2.5) + 1.0) / 2.0
+                hue = int((t * 40) % 360)
+                sat = 240
+                val = int(255 * pulse * factor)
+            elif "windmill" in p_lower or "radar" in p_lower:
+                angle = math.degrees(math.atan2(row - 2.5, col - 11.0))
+                hue = int((angle + t * 140) % 360)
+                sat = 240
+                val = int(255 * factor)
+            elif "star" in p_lower or "meteor" in p_lower:
+                val_hash = math.sin(kid.__hash__() * 0.1 + t * 4.0)
+                if val_hash > 0.6:
+                    val = int(255 * ((val_hash - 0.6) / 0.4) * factor)
+                    hue = int((kid.__hash__() % 360))
+                    sat = 200
+                else:
+                    val = int(30 * factor)
+                    hue = 220
+                    sat = 255
+            elif "matrix" in p_lower:
+                wave_v = math.sin(row * 1.5 - t * 5.0 + col * 0.4)
+                if wave_v > 0.4:
+                    val = int(255 * factor)
+                    hue = 120  # Pure green
+                    sat = 255
+                else:
+                    val = int(30 * factor)
+                    hue = 120
+                    sat = 255
+            elif "cyberpunk" in p_lower:
+                step = int((col * 0.5 + t * 2.0) % 2)
+                hue = 320 if step == 0 else 180  # Pink / Cyan
+                sat = 240
+                val = int(255 * factor)
+            elif "rhythm" in p_lower or "music" in p_lower:
+                audio_h = math.sin(t * 8.0 + col * 0.8) * 0.5 + 0.5
+                if (5 - row) / 6.0 <= audio_h:
+                    hue = int((row * 40 + t * 30) % 360)
+                    sat = 255
+                    val = int(255 * factor)
+                else:
+                    hue = 220
+                    sat = 100
+                    val = int(20 * factor)
+            else:  # Standard Spectrum Cycle
+                hue = int((t * 80 + col * 12 + row * 6) % 360)
+                sat = 240
+                val = int(255 * factor)
+
+            c = QColor.fromHsv(max(0, min(359, hue)), max(0, min(255, sat)), max(0, min(255, val)))
+            btn.set_color(c.name())
 
 
 class MainWindow(QMainWindow):
@@ -115,6 +365,15 @@ class MainWindow(QMainWindow):
 
         self.init_ui()
         self.init_system_tray()
+
+        # Initialize Live RGB Animation Engine
+        self.live_anim = LiveRGBAnimationController(self.rgb_key_buttons, self)
+        initial_preset = self.backend.lighting_config.get("preset_name", "Spectral Cycle")
+        initial_bright = int(self.backend.lighting_config.get("brightness", 100))
+        self.live_anim.set_preset(initial_preset)
+        self.live_anim.set_brightness(initial_bright)
+        self.live_anim.start()
+
         self.connect_signals()
         self.refresh_device()
         self.load_effects()
@@ -204,7 +463,7 @@ class MainWindow(QMainWindow):
     # VIRTUAL KEYBOARD BUILDER (Handles Split Spacebar & Standard Spacebar)
     # =========================================================================
     def build_keyboard_grid(self, grid_layout: QGridLayout, buttons_dict: Dict[str, KeyVisualButton],
-                            click_handler, space_mode: str):
+                            click_handler, space_mode: str, mode: str = "rgb"):
         # Clear existing widgets from layout
         while grid_layout.count():
             item = grid_layout.takeAt(0)
@@ -215,18 +474,32 @@ class MainWindow(QMainWindow):
         # Rows 0 to 4
         for key_info in KEY_DEFINITIONS:
             if key_info["row"] < 5:
-                btn = KeyVisualButton(key_info["id"], key_info["label"], key_info["group"])
+                w_u = key_info.get("width", 1.0)
+                h_u = key_info.get("height", 1.0)
+                btn = KeyVisualButton(
+                    key_id=key_info["id"],
+                    label=key_info["label"],
+                    group=key_info["group"],
+                    width_u=w_u,
+                    height_u=h_u,
+                    knob_id=key_info.get("knob_id"),
+                    knob_name=key_info.get("knob_name"),
+                    mode=mode
+                )
+                btn.row = key_info["row"]
+                btn.col = key_info["col"]
                 btn.key_clicked.connect(click_handler)
+
                 row = key_info["row"]
-                col_pos = int(key_info["col"] * 2)
-                col_span = int(key_info.get("width", 1.0) * 2)
-                row_span = int(key_info.get("height", 1.0))
+                col_pos = int(round(key_info["col"] * 8))
+                col_span = int(round(w_u * 8))
+                row_span = int(round(h_u))
                 grid_layout.addWidget(btn, row, col_pos, row_span, col_span)
                 buttons_dict[key_info["id"]] = btn
 
         # Row 5 (Bottom Row with Spacebar Options)
         bottom_keys = [
-            {"id": "LCtrl", "label": "Ctrl", "group": "mod", "col": 0, "width": 1.25},
+            {"id": "LCtrl", "label": "Ctrl", "group": "mod", "col": 0.0, "width": 1.25},
             {"id": "LWin", "label": "Win", "group": "mod", "col": 1.25, "width": 1.25},
             {"id": "LAlt", "label": "Alt", "group": "mod", "col": 2.5, "width": 1.25},
         ]
@@ -253,11 +526,24 @@ class MainWindow(QMainWindow):
         ])
 
         for k in bottom_keys:
-            btn = KeyVisualButton(k["id"], k["label"], k["group"])
+            w_u = k.get("width", 1.0)
+            h_u = k.get("height", 1.0)
+            btn = KeyVisualButton(
+                key_id=k["id"],
+                label=k["label"],
+                group=k["group"],
+                width_u=w_u,
+                height_u=h_u,
+                knob_id=k.get("knob_id"),
+                knob_name=k.get("knob_name"),
+                mode=mode
+            )
+            btn.row = 5
+            btn.col = k["col"]
             btn.key_clicked.connect(click_handler)
             row = 5
-            col_pos = int(k["col"] * 2)
-            col_span = int(k.get("width", 1.0) * 2)
+            col_pos = int(round(k["col"] * 8))
+            col_span = int(round(w_u * 8))
             grid_layout.addWidget(btn, row, col_pos, 1, col_span)
             buttons_dict[k["id"]] = btn
 
@@ -270,54 +556,63 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
-        # Top interactive keyboard container
-        kb_card = QFrame()
-        kb_card.setObjectName("keyMapContainer")
-        kb_layout = QVBoxLayout(kb_card)
-        kb_layout.setContentsMargins(8, 8, 8, 8)
+        # Top Control Bar for Lighting Tab
+        top_ctrl_bar = QHBoxLayout()
+        lbl_title = QLabel("Wizualna Klawiatura 104 • Podgląd Animacji & Malowanie")
+        lbl_title.setStyleSheet("font-weight: bold; color: #7aa2f7; font-size: 13px;")
+        top_ctrl_bar.addWidget(lbl_title)
+        top_ctrl_bar.addStretch()
 
-        kb_header = QHBoxLayout()
-        kb_title = QLabel("Wizualna Klawiatura 104 (Kliknij klawisz, aby pomalować aktualnym kolorem)")
-        kb_title.setStyleSheet("font-weight: bold; color: #7aa2f7;")
-        kb_header.addWidget(kb_title)
-        kb_header.addStretch()
+        # Live Animation Preview Controls
+        self.btn_toggle_anim = QPushButton("⏸ Wstrzymaj podgląd")
+        self.btn_toggle_anim.setStyleSheet("background-color: #2b3b55; color: #7dcfff; font-weight: bold; padding: 4px 10px;")
+        self.btn_toggle_anim.clicked.connect(self.toggle_live_animation)
+        top_ctrl_bar.addWidget(self.btn_toggle_anim)
+
+        top_ctrl_bar.addWidget(QLabel("Prędkość:"))
+        self.slider_anim_speed = QSlider(Qt.Horizontal)
+        self.slider_anim_speed.setRange(2, 30)
+        self.slider_anim_speed.setValue(10)
+        self.slider_anim_speed.setFixedWidth(80)
+        self.slider_anim_speed.valueChanged.connect(self.on_anim_speed_changed)
+        top_ctrl_bar.addWidget(self.slider_anim_speed)
+
+        top_ctrl_bar.addSpacing(12)
 
         # Spacebar mode selector in RGB tab
-        kb_header.addWidget(QLabel("Układ Spacji:"))
-        self.rgb_radio_split_space = QRadioButton("Podwójna spacja (Split)")
-        self.rgb_radio_single_space = QRadioButton("Standardowa")
+        top_ctrl_bar.addWidget(QLabel("Układ Spacji:"))
+        self.rgb_radio_split_space = QRadioButton("Podwójna (Split)")
+        self.rgb_radio_single_space = QRadioButton("Standard")
         if self.space_mode == "split":
             self.rgb_radio_split_space.setChecked(True)
         else:
             self.rgb_radio_single_space.setChecked(True)
         self.rgb_radio_split_space.toggled.connect(self.on_space_mode_toggled)
         self.rgb_radio_single_space.toggled.connect(self.on_space_mode_toggled)
-        kb_header.addWidget(self.rgb_radio_split_space)
-        kb_header.addWidget(self.rgb_radio_single_space)
-        kb_header.addSpacing(15)
+        top_ctrl_bar.addWidget(self.rgb_radio_split_space)
+        top_ctrl_bar.addWidget(self.rgb_radio_single_space)
+        top_ctrl_bar.addSpacing(12)
 
         self.rgb_layer_combo = QComboBox()
         self.rgb_layer_combo.addItems(["Base", "Layer1", "Layer2", "Layer3"])
         self.rgb_layer_combo.currentIndexChanged.connect(self.on_rgb_layer_changed)
-        kb_header.addWidget(QLabel("Docelowa warstwa LED:"))
-        kb_header.addWidget(self.rgb_layer_combo)
-        kb_layout.addLayout(kb_header)
+        top_ctrl_bar.addWidget(QLabel("Docelowa warstwa LED:"))
+        top_ctrl_bar.addWidget(self.rgb_layer_combo)
+        layout.addLayout(top_ctrl_bar)
 
-        # Grid of keys
-        self.rgb_grid_widget = QWidget()
-        self.rgb_grid_layout = QGridLayout(self.rgb_grid_widget)
-        self.rgb_grid_layout.setSpacing(2)
-        self.rgb_grid_layout.setContentsMargins(0, 4, 0, 4)
+        # Authentic GK104 Pro Chassis with Smart Screen Mockup & Sunken Switch Plate
+        self.rgb_chassis = GK104ChassisWidget()
+        self.rgb_grid_layout = self.rgb_chassis.plate_layout
 
         self.build_keyboard_grid(
             self.rgb_grid_layout,
             self.rgb_key_buttons,
             self.on_rgb_key_clicked,
-            self.space_mode
+            self.space_mode,
+            mode="rgb"
         )
 
-        kb_layout.addWidget(self.rgb_grid_widget)
-        layout.addWidget(kb_card)
+        layout.addWidget(self.rgb_chassis)
 
         # Bottom Controls: Left (Effects library) | Right (Palette & Tools)
         splitter = QSplitter(Qt.Horizontal)
@@ -345,10 +640,12 @@ class MainWindow(QMainWindow):
         left_vbox.addLayout(search_box)
 
         self.effects_list_widget = QListWidget()
+        self.effects_list_widget.currentItemChanged.connect(self.on_effect_list_item_changed)
         self.effects_list_widget.itemDoubleClicked.connect(self.on_effect_double_clicked)
         left_vbox.addWidget(self.effects_list_widget)
 
-        btn_apply_effect = QPushButton("✨ Zastosuj wybraną animację")
+        btn_apply_effect = QPushButton("✨ Zastosuj wybraną animację do klawiatury")
+        btn_apply_effect.setObjectName("primaryBtn")
         btn_apply_effect.clicked.connect(self.apply_selected_effect)
         left_vbox.addWidget(btn_apply_effect)
 
@@ -509,28 +806,30 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(btn_clear_layer)
         layout.addLayout(top_bar)
 
-        # Interactive visual keyboard for remap
-        kb_card = QFrame()
-        kb_card.setObjectName("keyMapContainer")
-        kb_vbox = QVBoxLayout(kb_card)
-        kb_vbox.setContentsMargins(8, 8, 8, 8)
+        # Interactive visual keyboard for remap with GK104 Pro Chassis
+        remap_header = QHBoxLayout()
+        remap_title = QLabel("Wizualna Klawiatura 104 • Kliknij klawisz lub gniazdo pokrętła (🎛️), aby zmienić funkcję:")
+        remap_title.setStyleSheet("font-weight: bold; color: #7aa2f7;")
+        remap_header.addWidget(remap_title)
+        remap_header.addStretch()
 
-        kb_vbox.addWidget(QLabel("Wybierz klawisz myszką, aby przypisać nową funkcję, skrót lub makro:"))
+        legend_knob = QLabel("🎛️ Gniazda Pokręteł (K1-K6)")
+        legend_knob.setStyleSheet("color: #ff9e3b; font-weight: bold; background-color: #2b2216; padding: 3px 8px; border-radius: 4px; border: 1px solid #ff9e3b;")
+        remap_header.addWidget(legend_knob)
+        layout.addLayout(remap_header)
 
-        self.remap_grid_widget = QWidget()
-        self.remap_grid_layout = QGridLayout(self.remap_grid_widget)
-        self.remap_grid_layout.setSpacing(2)
-        self.remap_grid_layout.setContentsMargins(0, 4, 0, 4)
+        self.remap_chassis = GK104ChassisWidget()
+        self.remap_grid_layout = self.remap_chassis.plate_layout
 
         self.build_keyboard_grid(
             self.remap_grid_layout,
             self.remap_key_buttons,
             self.on_remap_key_selected,
-            self.space_mode
+            self.space_mode,
+            mode="remap"
         )
 
-        kb_vbox.addWidget(self.remap_grid_widget)
-        layout.addWidget(kb_card)
+        layout.addWidget(self.remap_chassis)
 
         # Rotary Knobs Section (GK104 Pro Modular Knobs)
         knobs_card = QFrame()
@@ -939,13 +1238,17 @@ class MainWindow(QMainWindow):
                 self.rgb_grid_layout,
                 self.rgb_key_buttons,
                 self.on_rgb_key_clicked,
-                self.space_mode
+                self.space_mode,
+                mode="rgb"
             )
+            self.live_anim.buttons = self.rgb_key_buttons
+
             self.build_keyboard_grid(
                 self.remap_grid_layout,
                 self.remap_key_buttons,
                 self.on_remap_key_selected,
-                self.space_mode
+                self.space_mode,
+                mode="remap"
             )
 
             # Update selected key if necessary
@@ -1029,6 +1332,27 @@ class MainWindow(QMainWindow):
             item.setData(Qt.UserRole, eff["name"])
             self.effects_list_widget.addItem(item)
 
+    def on_effect_list_item_changed(self, current: Optional[QListWidgetItem], previous: Optional[QListWidgetItem]):
+        if current:
+            effect_name = current.data(Qt.UserRole)
+            if effect_name:
+                self.live_anim.set_preset(effect_name)
+                self.rgb_chassis.update_screen_info("1.04″ SMART SCREEN", f"EFFECT: {effect_name[:12].upper()}")
+
+    def toggle_live_animation(self):
+        if self.live_anim.is_running:
+            self.live_anim.stop()
+            self.btn_toggle_anim.setText("▶ Uruchom podgląd")
+            self.btn_toggle_anim.setStyleSheet("background-color: #1f3554; color: #7aa2f7; font-weight: bold; padding: 4px 10px;")
+        else:
+            self.live_anim.start()
+            self.btn_toggle_anim.setText("⏸ Wstrzymaj podgląd")
+            self.btn_toggle_anim.setStyleSheet("background-color: #2b3b55; color: #7dcfff; font-weight: bold; padding: 4px 10px;")
+
+    def on_anim_speed_changed(self, value: int):
+        speed_factor = value / 10.0
+        self.live_anim.set_speed(speed_factor)
+
     def on_effect_double_clicked(self, item: QListWidgetItem):
         self.apply_selected_effect()
 
@@ -1039,10 +1363,12 @@ class MainWindow(QMainWindow):
             return
         effect_name = item.data(Qt.UserRole)
         layer = self.rgb_layer_combo.currentText()
+        self.live_anim.set_preset(effect_name)
         self.backend.lighting_config = {
             "mode": "preset",
             "preset_name": effect_name,
             "layer": layer,
+            "brightness": int(self.brightness_slider.value()),
             "static_colors": self.current_key_colors
         }
         self.apply_full_configuration()
@@ -1063,6 +1389,7 @@ class MainWindow(QMainWindow):
         if key_id in self.rgb_key_buttons:
             self.rgb_key_buttons[key_id].set_color(self.selected_brush_color)
             self.current_key_colors[key_id] = self.selected_brush_color
+            self.live_anim.set_static(self.current_key_colors)
 
     def paint_zone(self, zone_id: str):
         for kid, btn in self.rgb_key_buttons.items():
@@ -1077,6 +1404,7 @@ class MainWindow(QMainWindow):
             if match:
                 btn.set_color(self.selected_brush_color)
                 self.current_key_colors[kid] = self.selected_brush_color
+        self.live_anim.set_static(self.current_key_colors)
 
     def apply_preset_theme(self, theme_name: str):
         theme = COLOR_PRESETS.get(theme_name)
@@ -1088,19 +1416,26 @@ class MainWindow(QMainWindow):
             btn.set_color(color)
             self.current_key_colors[kid] = color
 
+        self.live_anim.set_static(self.current_key_colors)
+        self.rgb_chassis.update_screen_info("1.04″ SMART SCREEN", f"THEME: {theme_name[:12].upper()}")
+
     def apply_static_keyboard_colors(self):
         layer = self.rgb_layer_combo.currentText()
+        self.live_anim.set_static(self.current_key_colors)
         self.backend.lighting_config = {
             "mode": "static",
             "layer": layer,
+            "brightness": int(self.brightness_slider.value()),
             "static_colors": self.current_key_colors
         }
         self.apply_full_configuration()
 
     def turn_off_led(self):
+        self.live_anim.set_off()
         self.backend.lighting_config = {
             "mode": "off",
             "layer": self.rgb_layer_combo.currentText(),
+            "brightness": 0,
             "static_colors": self.current_key_colors
         }
         self.apply_full_configuration()
@@ -1196,8 +1531,12 @@ class MainWindow(QMainWindow):
         self.selected_remap_key = key_id
 
         # Update keyboard buttons selection
+        selected_btn = None
         for kid, btn in self.remap_key_buttons.items():
-            btn.set_selected(kid == key_id)
+            is_match = (kid == key_id)
+            btn.set_selected(is_match)
+            if is_match:
+                selected_btn = btn
 
         # Update knob buttons selection
         for aid, btn in self.knob_action_buttons.items():
@@ -1212,7 +1551,12 @@ class MainWindow(QMainWindow):
                 btn.setStyleSheet("background-color: #24293e; border: 1px solid #3b4261; color: #c0caf5;")
 
         friendly_name = self._get_friendly_key_name(key_id)
-        self.lbl_selected_remap_key.setText(f"Edytowany element: [ {friendly_name} ]")
+        if selected_btn and getattr(selected_btn, "knob_id", None):
+            self.lbl_selected_remap_key.setText(f"Edytowany element: [ {friendly_name} ] 🎛️ (Gniazdo {selected_btn.knob_name})")
+        else:
+            self.lbl_selected_remap_key.setText(f"Edytowany element: [ {friendly_name} ]")
+
+        self.remap_chassis.update_screen_info("1.04″ SMART SCREEN", f"REMAP: {key_id[:12].upper()}")
 
     def on_knob_preset_applied(self, knob_id: str, combo: QComboBox):
         preset_name = combo.currentData()
@@ -1580,13 +1924,16 @@ class MainWindow(QMainWindow):
                 self.rgb_grid_layout,
                 self.rgb_key_buttons,
                 self.on_rgb_key_clicked,
-                self.space_mode
+                self.space_mode,
+                mode="rgb"
             )
+            self.live_anim.buttons = self.rgb_key_buttons
             self.build_keyboard_grid(
                 self.remap_grid_layout,
                 self.remap_key_buttons,
                 self.on_remap_key_selected,
-                self.space_mode
+                self.space_mode,
+                mode="remap"
             )
             self.refresh_remap_ui()
             self.refresh_macro_list_ui()
@@ -1598,10 +1945,12 @@ class MainWindow(QMainWindow):
     def on_brightness_slider_changed(self, value: int):
         self.lbl_brightness_val.setText(f"Jasność: {value}%")
         self.backend.lighting_config["brightness"] = value
+        self.live_anim.set_brightness(value)
 
     def set_brightness_level(self, value: int):
         self.brightness_slider.setValue(value)
         self.lbl_brightness_val.setText(f"Jasność: {value}%")
+        self.live_anim.set_brightness(value)
         self.backend.set_brightness(value, auto_apply=True)
         self.lbl_bottom_info.setText(f"Ustawiono jasność: {value}% i wgrano do klawiatury.")
 

@@ -147,10 +147,10 @@ KNOB_PRESETS = {
     }
 }
 
-# 104 Keys definition with display names, positions and groups
+# 104 Keys definition with display names, positions, groups and modular knob indicators
 KEY_DEFINITIONS = [
     # Row 1 (F-Row)
-    {"id": "Esc", "label": "ESC", "group": "func", "row": 0, "col": 0},
+    {"id": "Esc", "label": "ESC", "group": "func", "row": 0, "col": 0, "knob_id": "Knob1", "knob_name": "Knob 1 (Główne / Esc)"},
     {"id": "F1", "label": "F1", "group": "func", "row": 0, "col": 2},
     {"id": "F2", "label": "F2", "group": "func", "row": 0, "col": 3},
     {"id": "F3", "label": "F3", "group": "func", "row": 0, "col": 4},
@@ -161,11 +161,11 @@ KEY_DEFINITIONS = [
     {"id": "F8", "label": "F8", "group": "func", "row": 0, "col": 9.5},
     {"id": "F9", "label": "F9", "group": "func", "row": 0, "col": 11},
     {"id": "F10", "label": "F10", "group": "func", "row": 0, "col": 12},
-    {"id": "F11", "label": "F11", "group": "func", "row": 0, "col": 13},
-    {"id": "F12", "label": "F12", "group": "func", "row": 0, "col": 14},
-    {"id": "Screenshot", "label": "PrtSc", "group": "nav", "row": 0, "col": 15.5},
-    {"id": "ScrollLock", "label": "ScrLk", "group": "nav", "row": 0, "col": 16.5},
-    {"id": "Pause", "label": "Pause", "group": "nav", "row": 0, "col": 17.5},
+    {"id": "F11", "label": "F11", "group": "func", "row": 0, "col": 13, "knob_id": "Knob2", "knob_name": "Knob 2 (F11)"},
+    {"id": "F12", "label": "F12", "group": "func", "row": 0, "col": 14, "knob_id": "Knob3", "knob_name": "Knob 3 (F12)"},
+    {"id": "Screenshot", "label": "PrtSc", "group": "nav", "row": 0, "col": 15.5, "knob_id": "Knob4", "knob_name": "Knob 4 (PrtSc)"},
+    {"id": "ScrollLock", "label": "ScrLk", "group": "nav", "row": 0, "col": 16.5, "knob_id": "Knob5", "knob_name": "Knob 5 (ScrLk)"},
+    {"id": "Pause", "label": "Pause", "group": "nav", "row": 0, "col": 17.5, "knob_id": "Knob6", "knob_name": "Knob 6 (Pause)"},
 
     # Row 2 (Numbers)
     {"id": "BackTick", "label": "`", "group": "alpha", "row": 1, "col": 0},
@@ -870,11 +870,19 @@ class GKBackend(QObject):
             preset_name = "CustomGUIStatic"
             static_colors = self.lighting_config.get("static_colors", {})
             self._save_static_le_file(preset_name, static_colors, brightness=brightness)
-            blocks.append(f"[NoLighting]\n[Lighting({preset_name},{layer})]\n")
+            # Apply to all main layers so the keyboard never goes dark when switching layers or connection modes
+            blocks.append(f"[Lighting({preset_name},Base)]")
+            blocks.append(f"[Lighting({preset_name},Layer1)]")
+            blocks.append(f"[Lighting({preset_name},Layer2)]")
+            blocks.append(f"[Lighting({preset_name},Layer3)]\n")
         else:
             preset_name = self.lighting_config.get("preset_name", "Spectral Cycle")
             actual_preset = self._prepare_preset_lighting(preset_name, brightness=brightness)
-            blocks.append(f"[NoLighting]\n[Lighting({actual_preset},{layer})]\n")
+            # Apply to all main layers so the keyboard stays lit on Windows (Layer 1), Mac (Layer 2) and Base
+            blocks.append(f"[Lighting({actual_preset},Base)]")
+            blocks.append(f"[Lighting({actual_preset},Layer1)]")
+            blocks.append(f"[Lighting({actual_preset},Layer2)]")
+            blocks.append(f"[Lighting({actual_preset},Layer3)]\n")
 
         return "\n".join(blocks)
 

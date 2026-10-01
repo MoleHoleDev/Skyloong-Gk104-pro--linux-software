@@ -41,17 +41,24 @@ Zaawansowana, natywna aplikacja graficzna w **Pythonie (PySide6)** stworzona dla
 
 ---
 
-### 3. 🌈 Oświetlenie LED, Jasność & Kontroler w Trayu
+### 3. 🌈 Oświetlenie LED, Jasność, Podgląd Animacji & Kontroler w Trayu
+- **Naprawa gaśnięcia LED:** Wyeliminowano problem wyłączania podświetlenia – konfiguracja oświetlenia jest natychmiast propagowana na wszystkie aktywne warstwy sprzętowe (Base, Layer 1, Layer 2, Layer 3).
+- **Podgląd animacji na żywo (Live Animation Engine):**
+  - Płynny silnik animacji w czasie rzeczywistym (~30 FPS) symulujący wybrane efekty (Tęcza, Fala, Oddychanie, Wiatrak, Gwiazdy/Meteor, Matrix, Cyberpunk, Rytm dźwięku oraz własne palety) bezpośrednio na wirtualnej klawiaturze.
+  - Sterowanie podglądem: przycisk Pauza/Start oraz suwak regulacji prędkości animacji.
+- **Wizualna Klawiatura & Obudowa GK104 Pro:**
+  - Realistyczna stylizacja obudowy CNC GK104 Pro z zagłębioną płytą montażową (Switch Plate), wskaźnikami LED (`[CAPS]`, `[NUM]`, `[WIN]`, `[MAC]`, `[2.4G]`, `[BT]`, `[USB]`) oraz symulacją ekranu 1.04″ Smart OLED Screen.
+  - Kwadratowe proporcje nasadek klawiszy (1:1 aspect ratio) z czytelnymi legendami.
+  - **Wyróżnienie gniazd pokręteł (Knobs 1..6):** Klawisze obsługujące modułowe pokrętła (`Esc`, `F11`, `F12`, `PrtSc`, `ScrLk`, `Pause`) są w trybie remapowania wyraźnie wyróżnione bursztynową ramką i plakietkami `🎛️ K1`..`🎛️ K6`.
 - **Płynna regulacja jasności (0–100%):** Dedykowany suwak jasności oraz szybkie przyciski (25%, 50%, 75%, 100%, Wył.) z dynamicznym skalowaniem luminancji profili RGB.
 - **Kontroler w zasobniku KDE Plasma (System Tray):**
   - Ikona w trayu ze wskaźnikiem na żywo: podgląd stanu baterii laptopa (`BAT0`), zasilacza i urządzeń bezprzewodowych.
   - Szybkie menu kontekstowe: zmiana jasności podświetlenia (100%, 75%, 50%, 25%, 0%), szybkie motywy RGB, przełączanie warstw sprzętowych (Base, Layer 1-3).
   - Działanie w tle i minimalizacja do traya przy zamykaniu okna.
-- **Biblioteka animacji:** Ponad 330 animowanych efektów z wyszukiwarką i podziałem na kategorie (Tęcza, Oddychanie, Fala, Gwiazdy/Meteor, Wiatrak, Dynamiczne).
+- **Biblioteka animacji:** Ponad 330 animowanych efektów z wyszukiwarką i podziałem na kategorie.
 - **Wirtualne malowanie klawiatury (Per-Key RGB):** Malowanie pojedynczych klawiszy własnym kolorem z próbnika `QColorDialog`.
 - **Malowanie strefowe:** Szybkie nakładanie kolorów na strefy (WASD, Strzałki, NumPad, F1-F12, Litery, Całość).
 - **Gotowe motywy stylizowane:** Cyberpunk 2077, Synthwave Neon, Matrix Green, Sunset Glow, Ice Blizzard, Blood Red.
-- **Tryb nocny:** Błyskawiczne wyłączanie podświetlenia LED.
 
 ---
 

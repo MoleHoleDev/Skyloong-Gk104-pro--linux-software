@@ -393,4 +393,19 @@ QPushButton.knobActionButtonSelected {
     color: #ffffff;
     font-weight: bold;
 }
+
+/* GK104 Chassis & Live Preview */
+QFrame#gk104Chassis {
+    background-color: #11121a;
+    border: 2px solid #292d3e;
+    border-radius: 14px;
+    padding: 10px;
+}
+
+QFrame#oledScreenMockup {
+    background-color: #060913;
+    border: 1.5px solid #00f0ff;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
 """
