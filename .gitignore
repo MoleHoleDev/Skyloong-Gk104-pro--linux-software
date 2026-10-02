@@ -1,2 +1,21 @@
+# Python & Bytecode
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# IDE & Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Runtime Logs
+GK6X-v1.22/KbLog.txt
+*.log

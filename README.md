@@ -135,7 +135,7 @@ An advanced, native **Python / PySide6 (Qt6)** graphical utility built for Linux
 ### Option A: Automatic Setup (Recommended)
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/kret/Skyloong-Gk104-pro--linux-software.git
+   git clone https://github.com/MoleHoleDev/Skyloong-Gk104-pro--linux-software.git
    cd Skyloong-Gk104-pro--linux-software
    ```
 
@@ -362,7 +362,7 @@ All local application profiles, active states, and backups are stored in the use
 ### Metoda A: Szybkie Uruchomienie (Zalecana)
 1. **Pobierz repozytorium:**
    ```bash
-   git clone https://github.com/kret/Skyloong-Gk104-pro--linux-software.git
+   git clone https://github.com/MoleHoleDev/Skyloong-Gk104-pro--linux-software.git
    cd Skyloong-Gk104-pro--linux-software
    ```
 

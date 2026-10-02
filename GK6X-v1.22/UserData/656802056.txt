@@ -40,6 +40,28 @@ Press:LCtrl+LShift+Escape
 Press:A:20
 Press:0x09060002:20
 
+[Macro(Cyberpunk_Combo,25,RepeatXTimes,3)]
+Down:LCtrl:20
+Press:C:30
+Up:LCtrl:20
+Down:LAlt:25
+Press:Tab:40
+Up:LAlt:20
+Press:Enter:50
+
+[Macro(Quick_Terminal,20,ReleaseKeyToStop,1)]
+Down:LCtrl:15
+Down:LAlt:15
+Press:T:30
+Up:LAlt:15
+Up:LCtrl:15
+
+[Macro(Gaming_Burst,15,PressKeyAgainToStop,1)]
+Press:1:20
+Press:2:20
+Press:3:20
+Press:F:30
+
 # ==========================
 # KEY REMAPPINGS
 # ==========================
@@ -50,20 +72,29 @@ Knob4_Click:ToggleLighting
 Knob1_CW:VolumeUp
 Knob1_CCW:VolumeDown
 Knob1_Click:VolumeMute
-Knob2_CW:BrightnessUp
-Knob2_CCW:BrightnessDown
-Knob2_Click:ToggleLighting
+Knob2_CW:VolumeUp
+Knob2_CCW:VolumeDown
+Knob2_Click:VolumeMute
+Knob3_CW:BrowserForward
+Knob3_CCW:BrowserBack
+Knob3_Click:BrowserRefresh
 
 [Layer1]
-Knob4_CCW:BrightnessDown
-Knob4_CW:BrightnessUp
-Knob4_Click:ToggleLighting
+Knob2_CW:MediaNext
+Knob2_CCW:MediaPrevious
+Knob2_Click:MediaPlayPause
 Knob1_CW:VolumeUp
 Knob1_CCW:VolumeDown
 Knob1_Click:VolumeMute
-Knob2_CW:BrightnessUp
-Knob2_CCW:BrightnessDown
-Knob2_Click:ToggleLighting
+Knob3_CW:BrowserForward
+Knob3_CCW:BrowserBack
+Knob3_Click:BrowserRefresh
+F1:VolumeMute
+F2:VolumeDown
+F3:VolumeUp
+Knob4_CCW:BrightnessDown
+Knob4_CW:BrightnessUp
+Knob4_Click:ToggleLighting
 
 [Layer2]
 Knob1_CW:VolumeUp
@@ -75,6 +106,9 @@ Knob2_Click:ToggleLighting
 Knob4_CW:VolumeUp
 Knob4_CCW:VolumeDown
 Knob4_Click:VolumeMute
+Knob3_CW:BrowserForward
+Knob3_CCW:BrowserBack
+Knob3_Click:BrowserRefresh
 
 [Layer3]
 Knob1_CW:VolumeUp
@@ -86,6 +120,9 @@ Knob2_Click:ToggleLighting
 Knob4_CW:VolumeUp
 Knob4_CCW:VolumeDown
 Knob4_Click:VolumeMute
+Knob3_CW:BrowserForward
+Knob3_CCW:BrowserBack
+Knob3_Click:BrowserRefresh
 
 [FnLayer1]
 Q:Macro(QuickCopyPaste)
